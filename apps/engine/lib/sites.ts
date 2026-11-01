@@ -18,7 +18,9 @@ export async function siteByHost(hostHeader: string | null): Promise<SiteRow | n
   if (!host) return null;
   const hit = cache.get(host);
   if (hit && Date.now() - hit.at < TTL) return hit.site;
-  const site = (await one<SiteRow>(`select ${COLS} from sites s join clients c on c.id = s.client_id where lower(s.domain) = $1 and s.status in ('live','down')`, [host])) ?? null;
+  // โดเมนหลักของระบบ หรือโดเมนของลูกค้าที่ผูกแล้ว (DNS + SSL พร้อม)
+  const site = (await one<SiteRow>(`select ${COLS} from sites s join clients c on c.id = s.client_id
+    where s.status in ('live','down') and (lower(s.domain) = $1 or exists (select 1 from site_domains d where d.site_id = s.id and d.domain = $1 and d.status = 'active'))`, [host])) ?? null;
   cache.set(host, { at: Date.now(), site });
   if (cache.size > 5000) cache.delete(cache.keys().next().value!);
   return site;

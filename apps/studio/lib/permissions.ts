@@ -12,6 +12,7 @@ export const PERMS = {
   "finance.edit": "ออกเอกสาร · ตรวจ/ยืนยันสลิป · ยกเลิกเอกสาร",
   "system.retry": "ลองงานอัตโนมัติใหม่",
   "team.manage": "จัดการทีมและสิทธิ์",
+  "domains.buy": "ซื้อโดเมนใหม่ (มีค่าใช้จ่าย)",
 } as const;
 export type Perm = keyof typeof PERMS;
 
