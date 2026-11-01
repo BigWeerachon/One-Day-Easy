@@ -16,8 +16,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         {!threads.length && <div className="cb mut">ยังไม่มีแชท</div>}
       </Card>
       <Card className="main" title={cl ? <Link href={`/clients/${cur}`}>{cl.name} · {cl.channel}</Link> : "—"}>
-        <div className="list" style={{ minHeight: 300 }}>{msgs.map((m) => <div key={m.id} className={"bubble" + (m.from === "team" ? " me" : "")}>{m.text}<div className="sm" style={{ opacity: .7 }}>{new Date(m.at).toLocaleString("th-TH")}</div></div>)}</div>
-        {cl && <form action={replyAction} className="f" style={{ marginTop: 16 }}><input type="hidden" name="client" value={cur} /><input className="inp" name="text" placeholder="พิมพ์ตอบ... (บันทึกในระบบ · ยังไม่ส่ง LINE จริง)" style={{ flex: 1 }} /><button className="btn">ส่ง / อ่านแล้ว</button></form>}
+        <div className="list" style={{ minHeight: 300 }}>{msgs.map((m) => <div key={m.id} className={"bubble" + (m.from === "team" ? " me" : "")}>{m.text}<div className="sm" style={{ opacity: .75 }}>{new Date(m.at).toLocaleString("th-TH")}{m.from === "team" && m.delivery !== "none" && <> · {m.delivery === "sent" ? "✓ ส่ง LINE แล้ว" : m.delivery === "pending" ? "กำลังส่ง…" : `✗ ส่งไม่สำเร็จ: ${m.deliveryError}`}</>}</div></div>)}</div>
+        {cl && <form action={replyAction} className="f" style={{ marginTop: 16 }}><input type="hidden" name="client" value={cur} /><input className="inp" name="text" placeholder={cl.channel === "LINE" ? "พิมพ์ตอบ... (ส่งผ่าน LINE OA)" : "พิมพ์ตอบ... (บันทึกในระบบ)"} style={{ flex: 1 }} /><button className="btn">ส่ง / อ่านแล้ว</button></form>}
       </Card>
     </div></div>
   </>);

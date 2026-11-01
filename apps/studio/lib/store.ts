@@ -4,6 +4,8 @@ import { q, one, tx } from "./db";
 import { canTransition, type Stage, type Actor } from "./workflow";
 import { type DocType, EXPIRY_DAYS } from "./money";
 import { ALL_EVENTS } from "./events";
+import { randomUUID } from "node:crypto";
+import { pushText, type LineError } from "./line";
 
 export type ClientStatus = "lead" | "active" | "care";
 export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; taxId: string | null }
@@ -12,7 +14,7 @@ export interface Site { id: string; clientId: string; domain: string; template: 
 export interface SiteVersion { siteId: string; version: number; at: string; by: string; note: string }
 export interface Doc { no: string; type: DocType; clientId: string; clientName: string; jobId: string | null; total: number; paid: number; status: "draft" | "issued" | "paid" | "voided" | "expired"; issuedAt: string; revision: number }
 export interface Slip { id: string; docNo: string; amount: number; status: "pending" | "verified" | "rejected"; at: string }
-export interface Message { id: string; clientId: string; from: "client" | "team" | "system"; text: string; at: string; read: boolean }
+export interface Message { id: string; clientId: string; from: "client" | "team" | "system"; text: string; at: string; read: boolean; delivery: "none" | "pending" | "sent" | "failed"; deliveryError: string | null }
 export interface Task { id: string; name: string; jobId: string | null; attempts: number; status: "queued" | "running" | "done" | "failed" | "dead"; error: string | null; idemKey: string }
 export interface Ev { id: string; name: string; jobId: string | null; actor: string; source: "human" | "system"; before: unknown; after: unknown; at: string }
 export interface CatalogItem { code: string; name: string; price: number; recurring: boolean }
@@ -56,7 +58,7 @@ export const listThreads = () => q<{ clientId: string; name: string; color: stri
    join lateral (select body, created_at from messages where conversation_id = cv.id order by created_at desc limit 1) m on true
    order by m.created_at desc`);
 export const listMessages = (clientId: string) => q<Message>(
-  `select m.id::text, cv.client_id "clientId", m.sender "from", m.body text, m.created_at::text at, m.read_at is not null read
+  `select m.id::text, cv.client_id "clientId", m.sender "from", m.body text, m.created_at::text at, m.read_at is not null read, m.delivery, m.delivery_error "deliveryError"
    from messages m join conversations cv on cv.id = m.conversation_id where cv.client_id = $1 order by m.created_at`, [clientId]);
 export const unreadCount = async () => (await one<{ n: number }>(`select count(*)::int n from messages where sender = 'client' and read_at is null`))!.n;
 
@@ -187,19 +189,86 @@ export async function expireDocs() {
 }
 
 export async function retryTask(id: string) {
-  const r = await q(`update tasks set status = 'queued', attempts = 0, last_error = null, run_after = now() where id = $1 and status in ('dead','failed') returning id`, [id]);
+  const r = await q<{ name: string; payload: unknown }>(`update tasks set status = 'queued', attempts = 0, last_error = null, run_after = now() where id = $1 and status in ('dead','failed') returning name, payload`, [id]);
   if (!r.length) throw new Error("ไม่พบงานที่ลองใหม่ได้");
+  if (r[0].name.startsWith("line.push") && r[0].payload) await runLinePush(id);
 }
 
+export async function lineUserIdOf(clientId: string) {
+  return (await one<{ value: string }>(`select value from contacts where client_id = $1 and channel = 'LINE' and value like 'U%' order by id limit 1`, [clientId]))?.value ?? null;
+}
+
+/** บันทึกข้อความตอบ · ถ้าลูกค้ามี LINE userId จะสร้างงาน line.push แล้วส่งทันที */
 export async function reply(clientId: string, text: string) {
-  await tx(async (c) => {
-    const [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [clientId]);
+  const to = text ? await lineUserIdOf(clientId) : null;
+  const taskId = await tx(async (c) => {
+    const [cv] = await rows<{ id: string; channel: string }>(c, `select id, channel from conversations where client_id = $1`, [clientId]);
     if (!cv) throw new Error("ไม่พบห้องแชท");
     await c.query(`update messages set read_at = now() where conversation_id = $1 and read_at is null`, [cv.id]);
-    if (text) {
-      await c.query(`insert into messages (conversation_id, sender, body, read_at) values ($1,'team',$2,now())`, [cv.id, text]);
-      await c.query(`update clients set last_contact_at = now() where id = $1`, [clientId]);
+    if (!text) return null;
+    if (cv.channel === "LINE" && !to) throw new Error("ลูกค้านี้ยังไม่มี LINE userId · ต้องให้ลูกค้าทักมาที่ LINE OA ก่อนจึงจะส่งได้");
+    const [m] = await rows<{ id: string }>(c, `insert into messages (conversation_id, sender, body, read_at, delivery) values ($1,'team',$2,now(),$3) returning id::text`, [cv.id, text, to ? "pending" : "none"]);
+    await c.query(`update clients set last_contact_at = now() where id = $1`, [clientId]);
+    if (!to) return null;
+    const [t] = await rows<{ id: string }>(c, `insert into tasks (name, idempotency_key, payload) values ('line.push · ตอบแชท', $1, $2) returning id::text`,
+      [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID() })]);
+    return t.id;
+  });
+  if (taskId) await runLinePush(taskId);
+}
+
+const MAX_ATTEMPTS = 3;
+/** ทำงาน line.push 1 ครั้ง · ล้มเหลวครบ 3 ครั้ง → dead-letter (ให้คนกดลองใหม่) */
+export async function runLinePush(taskId: string) {
+  const t = await one<{ status: string; attempts: number; payload: { message_id: string; to: string; retry_key: string } }>(`select status, attempts, payload from tasks where id = $1`, [taskId]);
+  if (!t || !["queued", "failed"].includes(t.status)) return;
+  const m = await one<{ body: string }>(`select body from messages where id = $1`, [t.payload.message_id]);
+  if (!m) return;
+  await q(`update tasks set status = 'running', attempts = attempts + 1 where id = $1`, [taskId]);
+  try {
+    await pushText(t.payload.to, m.body, t.payload.retry_key);
+    await q(`update tasks set status = 'done', last_error = null where id = $1`, [taskId]);
+    await q(`update messages set delivery = 'sent', delivery_error = null where id = $1`, [t.payload.message_id]);
+  } catch (e) {
+    const err = e as LineError; const attempts = t.attempts + 1;
+    const dead = !err.retryable || attempts >= MAX_ATTEMPTS;
+    await tx(async (c) => {
+      await c.query(`update tasks set status = $2, last_error = $3, run_after = now() + interval '1 minute' * $4 where id = $1`, [taskId, dead ? "dead" : "failed", err.message, 2 ** attempts]);
+      await c.query(`update messages set delivery = 'failed', delivery_error = $2 where id = $1`, [t.payload.message_id, err.message]);
+      await emit(c, dead ? "task.deadlettered" : "task.failed", { actor: "system", source: "system", after: { task: taskId, error: err.message } });
+    });
+  }
+}
+
+/** งาน line.push ที่ถึงเวลาลองใหม่ (เรียกจาก cron) */
+export async function runDueLineTasks(limit = 20) {
+  const due = await q<{ id: string }>(`select id::text from tasks where name like 'line.push%' and status in ('queued','failed') and payload is not null and run_after <= now() order by id limit $1`, [limit]);
+  for (const t of due) await runLinePush(t.id);
+  return due.length;
+}
+
+export interface IncomingLine { userId: string; messageId: string; text: string; displayName: string | null }
+/** ข้อความเข้าจาก LINE webhook · ลูกค้าใหม่ → สร้าง client + งาน · ส่งซ้ำ (redelivery) ไม่บันทึกซ้ำ */
+export async function receiveLineMessage(m: IncomingLine): Promise<"new" | "duplicate"> {
+  return tx(async (c) => {
+    let [ct] = await rows<{ client_id: string }>(c, `select client_id from contacts where channel = 'LINE' and value = $1`, [m.userId]);
+    if (!ct) {
+      const name = m.displayName || `ลูกค้า LINE ${m.userId.slice(-4)}`;
+      const [cl] = await rows<{ id: string }>(c, `insert into clients (name, contact_name, channel) values ($1,$1,'LINE') returning id`, [name]);
+      await c.query(`insert into contacts (client_id, channel, value, name) values ($1,'LINE',$2,$3) on conflict do nothing`, [cl.id, m.userId, name]);
+      const [j] = await rows<{ id: string }>(c, `insert into jobs (client_id, title, assignee, sla_due_at) values ($1,$2,'มิ้น', now() + interval '8 hour') returning id`, [cl.id, name]);
+      await emit(c, "client.created", { actor: "system", source: "system" });
+      await emit(c, "job.created", { jobId: j.id, actor: "system", source: "system" });
+      ct = { client_id: cl.id };
     }
+    let [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [ct.client_id]);
+    if (!cv) [cv] = await rows<{ id: string }>(c, `insert into conversations (client_id, channel) values ($1,'LINE') returning id`, [ct.client_id]);
+    const ins = await rows(c, `insert into messages (conversation_id, sender, body, external_id) values ($1,'client',$2,$3) on conflict (external_id) do nothing returning id`, [cv.id, m.text, `line:${m.messageId}`]);
+    if (!ins.length) return "duplicate";
+    await c.query(`update clients set last_contact_at = now() where id = $1`, [ct.client_id]);
+    const [job] = await rows<{ id: string }>(c, `select id from jobs where client_id = $1 order by created_at desc limit 1`, [ct.client_id]);
+    await emit(c, "message.received", { jobId: job?.id, actor: "client", source: "system", after: "line" });
+    return "new";
   });
 }
 
