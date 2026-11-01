@@ -1,3 +1,4 @@
+import { requirePage } from "@/lib/auth";
 import { listDocs, listSlips, listCatalog, listClients, listJobs } from "@/lib/store";
 import { issueDocAction, verifySlipAction, addSlipAction, voidDocAction, uploadSlipAction, reprocessSlipAction } from "@/lib/actions";
 import { listSlips as listSlipsBy, slipAutoApprove } from "@/lib/store";
@@ -6,6 +7,7 @@ import { baht, DOC_LABEL } from "@/lib/money";
 import { Header, Card, Kpi, Err } from "@/components/ui";
 const TONE = { issued: "c-b", paid: "c-g", voided: "", expired: "c-y", draft: "" };
 export default async function Finance({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
+  const me = await requirePage("finance.view");
   const { err } = await searchParams;
   const [docs, slips, catalog, clients, jobs, verified] = await Promise.all([listDocs(), listSlips(), listCatalog(), listClients(), listJobs(), listSlipsBy("verified")]);
   const autoToday = verified.filter((s) => s.decidedBy === "auto").length;

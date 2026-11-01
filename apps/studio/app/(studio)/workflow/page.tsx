@@ -1,9 +1,11 @@
+import { requirePage } from "@/lib/auth";
 import { listTasks, listEvents } from "@/lib/store";
 import { retryTaskAction } from "@/lib/actions";
 import { TRANSITIONS, STAGE_LABEL } from "@/lib/workflow";
 import { Header, Card, Err } from "@/components/ui";
 const T = { done: "c-g", running: "c-b", queued: "c-y", failed: "c-r", dead: "c-r" };
 export default async function Workflow({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
+  const me = await requirePage("work.view");
   const { err } = await searchParams;
   const [tasks, events] = await Promise.all([listTasks(), listEvents(undefined, 100)]);
   return (<>

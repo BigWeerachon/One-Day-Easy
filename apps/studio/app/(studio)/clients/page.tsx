@@ -1,3 +1,4 @@
+import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { listClients, countClients, countMissingTax } from "@/lib/store";
 import { addClientAction } from "@/lib/actions";
@@ -5,6 +6,7 @@ import { Header, Card, Kpi, Err, ago, Av } from "@/components/ui";
 const ST = { lead: ["Lead", "c-y"], active: ["กำลังทำ", "c-b"], care: ["ดูแลต่อ", "c-g"] } as const;
 const CH = { LINE: "#06c755", Email: "#e5373a", Web: "#141a2b", FB: "#1877f2" };
 export default async function Clients({ searchParams }: { searchParams: Promise<{ q?: string; s?: string; err?: string }> }) {
+  const me = await requirePage("clients.view");
   const { q = "", s = "", err } = await searchParams;
   const [rows, counts, missing] = await Promise.all([listClients(s, q), countClients(), countMissingTax()]);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);

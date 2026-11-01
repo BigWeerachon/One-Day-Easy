@@ -1,3 +1,4 @@
+import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { listSites, getSite, getJob, listJobs, siteVersions, listClients, listProposals } from "@/lib/store";
 import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction, proposePatchAction, applyProposalAction, rejectProposalAction } from "@/lib/actions";
@@ -7,6 +8,7 @@ import { TEMPLATES, BLOCKS, runChecks } from "@/lib/blocks";
 import { Header, Card, Err } from "@/components/ui";
 import JobActions from "@/components/JobActions";
 export default async function Builder({ searchParams }: { searchParams: Promise<{ site?: string; job?: string; block?: string; err?: string }> }) {
+  const me = await requirePage("sites.edit");
   const sp = await searchParams;
   const [sites, clients] = await Promise.all([listSites(), listClients()]);
   const name = Object.fromEntries(clients.map((c) => [c.id, c.name]));

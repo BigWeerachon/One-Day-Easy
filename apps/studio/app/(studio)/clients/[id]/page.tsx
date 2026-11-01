@@ -1,3 +1,4 @@
+import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClient, clientNotes, listJobs, listSites, listDocs, listEvents, getIntake } from "@/lib/store";
@@ -9,6 +10,7 @@ import { baht, DOC_LABEL } from "@/lib/money";
 import { Header, Card, Err, Av } from "@/components/ui";
 import JobActions from "@/components/JobActions";
 export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ err?: string }> }) {
+  const me = await requirePage("clients.view");
   const { id } = await params; const { err } = await searchParams;
   const c = await getClient(id); if (!c) notFound();
   const [jobs, sites, docs, notes, ik] = await Promise.all([listJobs(id), listSites(id), listDocs(id), clientNotes(id), getIntake(id)]);
