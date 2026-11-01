@@ -1,0 +1,28 @@
+.pt{min-height:100vh;background:#f4f6fa;color:#141a2b;font:400 16px/1.6 "IBM Plex Sans Thai",system-ui,sans-serif}
+.pt *{box-sizing:border-box}.pt h1,.pt h2,.pt p{margin:0}
+.pt-wrap{max-width:480px;margin:0 auto}
+.pt-top{background:#fff;border-bottom:1px solid #e5e8ef;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pt-logo{font-weight:700}.pt-logo span{color:#0b6cf0}
+.pt-bd{padding:16px;display:flex;flex-direction:column;gap:14px}
+.pt-card{background:#fff;border:1px solid #e5e8ef;border-radius:14px;padding:16px}
+.pt-h{font-size:20px;font-weight:600;line-height:1.35}
+.pt-mut{color:#5d6577}.pt-sm{font-size:14px;line-height:1.45}
+.pt-lbl{display:block;font-size:13px;color:#5d6577;margin:12px 0 6px}
+.pt-inp{width:100%;border:1px solid #dfe3eb;border-radius:10px;padding:12px;font:inherit;background:#fff;color:#141a2b}
+.pt-btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;border-radius:12px;border:0;background:#0b6cf0;color:#fff;font:600 16px/1.2 inherit;font-family:inherit;text-decoration:none;cursor:pointer}
+.pt-btn.o{background:#fff;color:#141a2b;border:1px solid #dfe3eb}.pt-btn.g{background:#06a24a}
+.pt-btn:disabled{opacity:.5}
+.pt-chip{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;background:#eef1f6;white-space:nowrap}
+.pt-ok{color:#0a7a3a}
+.pt-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #eef0f4}
+.pt-step{display:flex;gap:6px}.pt-step i{flex:1;height:4px;border-radius:2px;background:#dfe3eb}.pt-step i.on{background:#0b6cf0}
+.pt-err{background:#fdecec;border:1px solid #f5c2c2;color:#b42323;border-radius:12px;padding:12px 14px}
+.pt-note{background:#e7f6ec;border:1px solid #bfe5cc;color:#0a7a3a;border-radius:12px;padding:12px 14px}
+.pt-co{display:none}
+form:has(select[name=customerType] option[value=company]:checked) .pt-co,
+form:has(select[name=customerType] option[value=government]:checked) .pt-co{display:block}
+.pt-pick{display:flex;align-items:center;justify-content:center;min-height:48px;border:1px dashed #b8c2d6;border-radius:12px;cursor:pointer;color:#0b5bd3;font-weight:600;position:relative}
+.pt-pick input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.pt-thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.pt-thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px}
+.pt-qr svg{width:200px;height:200px;display:block;margin:12px auto}

@@ -2,25 +2,28 @@ import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClient, clientNotes, listJobs, listSites, listDocs, listEvents, getIntake } from "@/lib/store";
-import { addNoteAction, updateJobFlagsAction, extractIntakeAction } from "@/lib/actions";
+import { addNoteAction, updateJobFlagsAction, extractIntakeAction, sendPortalLinkAction } from "@/lib/actions";
+import { portalUrl } from "@/lib/portal";
 import { aiConfigured } from "@/lib/ai";
 import SubmitButton from "@/components/SubmitButton";
 import { STAGE_LABEL } from "@/lib/workflow";
 import { baht, DOC_LABEL } from "@/lib/money";
 import { Header, Card, Err, Av } from "@/components/ui";
 import JobActions from "@/components/JobActions";
-export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ err?: string }> }) {
+export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ err?: string; portal?: string; sent?: string }> }) {
   const me = await requirePage("clients.view");
-  const { id } = await params; const { err } = await searchParams;
+  const { id } = await params; const { err, portal, sent } = await searchParams;
   const c = await getClient(id); if (!c) notFound();
   const [jobs, sites, docs, notes, ik] = await Promise.all([listJobs(id), listSites(id), listDocs(id), clientNotes(id), getIntake(id)]);
   const intake = ik?.intake;
   const evs = jobs.length ? await listEvents(jobs.map((j) => j.id), 20) : [];
   const back = `/clients/${id}`;
   return (<>
-    <Header crumb={`ลูกค้า · ${c.kind}`} title={c.name}><Link className="btn o" href={`/inbox?c=${id}`}>เปิดแชท</Link></Header>
+    <Header crumb={`ลูกค้า · ${c.kind}`} title={c.name}><Link className="btn o" href={`/inbox?c=${id}`}>เปิดแชท</Link>
+      <form action={sendPortalLinkAction}><input type="hidden" name="client" value={id} /><button className="btn">ส่งลิงก์ Portal</button></form></Header>
     <div className="bd">
       <Err msg={err} />
+      {portal && <div className="note"><b>{sent === "1" ? "ส่งลิงก์ทาง LINE แล้ว" : "สร้างลิงก์แล้ว (ลูกค้ายังไม่มี LINE · ส่งเอง)"}</b> · ใช้ได้ 7 วัน · ลิงก์เก่าถูกยกเลิก<div className="mono sm" style={{ marginTop: 6, wordBreak: "break-all" }}>{portalUrl(portal)}</div></div>}
       <div className="row">
         <div className="main" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           {jobs.map((j) => (

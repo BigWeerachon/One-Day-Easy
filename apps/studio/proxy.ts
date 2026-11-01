@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 // ตรวจแบบเร็ว (มีคุกกี้หรือไม่) · การตรวจจริงอยู่ใน requireStaff ทุกหน้า/action/API
-const PUBLIC = ["/login", "/api/line/webhook", "/api/cron/"];
+const PUBLIC = ["/login", "/p/", "/api/line/webhook", "/api/cron/"];
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p))) return NextResponse.next();
