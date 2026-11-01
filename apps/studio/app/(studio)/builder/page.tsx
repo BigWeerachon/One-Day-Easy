@@ -1,6 +1,7 @@
 import { requirePage } from "@/lib/auth";
 import Link from "next/link";
-import { listSites, getSite, getJob, listJobs, siteVersions, listClients, listProposals } from "@/lib/store";
+import { listSites, getSite, getJob, listJobs, siteVersions, listClients, listProposals, clientFiles } from "@/lib/store";
+import { previewUrl, liveUrl } from "@/lib/preview";
 import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction, proposePatchAction, applyProposalAction, rejectProposalAction } from "@/lib/actions";
 import { aiConfigured, MODEL } from "@/lib/ai";
 import SubmitButton from "@/components/SubmitButton";
@@ -33,10 +34,13 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
   const checks = runChecks(tpl, site.config); const passed = checks.filter((c) => c.ok).length;
   const siteJob = job ?? (await listJobs(site.clientId)).find((j) => j.siteId === site.id && !["online", "care"].includes(j.stage));
   const block = sp.block && tpl.blocks.includes(sp.block) ? sp.block : tpl.blocks[0];
-  const [versions, proposals] = await Promise.all([siteVersions(site.id), listProposals(site.id)]);
+  const [versions, proposals, files] = await Promise.all([siteVersions(site.id), listProposals(site.id), clientFiles(site.clientId)]);
+  const pv = previewUrl(site.id);
   const ai = aiConfigured();
   return (<>
     <Header crumb={`สร้างเว็บ · ${name[site.clientId]}`} title={site.domain}>
+      {pv ? <a className="btn" href={pv} target="_blank" rel="noopener">ดูตัวอย่างเว็บ ↗</a> : <span className="chip c-y" title="ตั้ง ENGINE_URL และ PREVIEW_SECRET">ยังไม่ได้ตั้ง Site Engine</span>}
+      {site.status !== "draft" && <a className="btn o" href={liveUrl(site.domain)} target="_blank" rel="noopener">เปิดเว็บจริง ↗</a>}
       {sites.map((s) => <Link key={s.id} className={"btn sm " + (s.id === site.id ? "" : "o")} href={`/builder?site=${s.id}`}>{name[s.clientId]}</Link>)}
     </Header>
     <div className="bd">
@@ -87,6 +91,9 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
         <div className="side" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <Card title="ตรวจอัตโนมัติก่อนส่ง" right={<span className={"chip " + (passed === 6 ? "c-g" : "c-r")}>{passed}/6</span>}><div className="list">{checks.map((c) => <div key={c.name} className="sm">{c.ok ? "✅" : "❌"} {c.name}</div>)}</div><div className="sm mut" style={{ marginTop: 8 }}>ผลตรวจบันทึกลงงานทุกครั้งที่กดบันทึก</div></Card>
           {siteJob && <Card title={`งาน · ${siteJob.title}`}><div className="sm mut" style={{ marginBottom: 8 }}>ตรวจผ่านที่บันทึกไว้ {siteJob.checksPassed}/6</div><JobActions job={siteJob} back={`/builder?site=${site.id}`} /></Card>}
+          <Card title="รูปจากลูกค้า" right={<span className="sm mut">ใช้ในบล็อกด้วย "file:&lt;id&gt;"</span>}>
+            {files.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>{files.map((f) => <div key={f.id} className="sm" style={{ textAlign: "center" }}><img src={`/api/files/${f.id}`} alt={`รูป ${f.id}`} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8 }} /><span className="mono">file:{f.id}</span></div>)}</div> : <span className="sm mut">ลูกค้ายังไม่ได้ส่งรูป</span>}
+          </Card>
           <Card title="เวอร์ชัน (site_versions)" right={versions.length > 0 && <form action={rollbackAction}><input type="hidden" name="site" value={site.id} /><button className="btn o sm">ย้อนกลับ 1 เวอร์ชัน</button></form>}>
             <div className="list">{versions.map((v) => <div key={v.version} className="sm">v{v.version} · {v.note} · {v.by} · {new Date(v.at).toLocaleString("th-TH")}</div>)}{!versions.length && <span className="sm mut">ยังไม่มีประวัติ</span>}</div>
           </Card>

@@ -112,6 +112,8 @@ async function moveJobTx(c: Db, jobId: string, to: Stage, by: Actor, reason?: st
   }
   // trigger ในฐานข้อมูลตรวจซ้ำอีกชั้น (enforce_job_transition)
   await c.query(`update jobs set stage = $2::job_stage, approved = approved or $2::job_stage = 'invoice' where id = $1`, [jobId, to]);
+  // ขึ้นออนไลน์ = เปิดเว็บบน Site Engine ตามโดเมน
+  if (to === "online") await c.query(`update sites set status = 'live' where id = (select site_id from jobs where id = $1) and status = 'draft'`, [jobId]);
   const name = to === "paused" ? "job.paused" : resuming ? "job.resumed"
     : j.stage === "client_review" && to === "template" ? "edit.requested"
     : to === "client_review" ? "preview.sent" : to === "invoice" ? "site.approved" : to === "online" ? "site.published"
@@ -483,3 +485,6 @@ export async function notifySlipResult(slipId: string, outcome: "approved" | "re
     ? `ได้รับชำระ ${((s.amount ?? 0) / 100).toLocaleString("th-TH")} บาท สำหรับ ${s.doc_no} เรียบร้อยแล้ว ขอบคุณค่ะ 🙏${rc ? ` (ใบเสร็จ ${rc.no})` : ""}`
     : "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบและจะแจ้งกลับโดยเร็ว");
 }
+
+export const clientFiles = (clientId: string) => q<{ id: string; mime: string; at: string }>(`select id::text, mime, created_at::text at from client_files where client_id = $1 order by id desc limit 30`, [clientId]);
+export const clientFile = (id: string) => one<{ mime: string; bytes: Buffer; clientId: string }>(`select mime, bytes, client_id "clientId" from client_files where id = $1`, [id]);
