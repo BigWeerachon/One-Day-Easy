@@ -1,5 +1,5 @@
 import { Header, Card } from "@/components/ui";
-const ENV = [["DATABASE_URL", "Supabase Postgres (server เท่านั้น)"], ["LINE_CHANNEL_SECRET", "ตรวจลายเซ็น webhook /api/line/webhook"], ["LINE_CHANNEL_ACCESS_TOKEN", "ส่งข้อความ push (long-lived)"], ["CRON_SECRET", "ป้องกัน /api/cron/line (ลองส่งซ้ำ)"], ["ANTHROPIC_API_KEY", "Claude → JSON patch"]];
+const ENV = [["DATABASE_URL", "Supabase Postgres (server เท่านั้น)"], ["LINE_CHANNEL_SECRET", "ตรวจลายเซ็น webhook /api/line/webhook"], ["LINE_CHANNEL_ACCESS_TOKEN", "ส่งข้อความ push (long-lived)"], ["CRON_SECRET", "ป้องกัน /api/cron/line (ลองส่งซ้ำ)"], ["ANTHROPIC_API_KEY", "Claude: สรุปแชท · แก้เว็บ · อ่านสลิป"], ["SHOP_RECEIVER_ACCOUNTS", "บัญชีร้านสำหรับตรวจสลิป"], ["SHOP_RECEIVER_NAMES", "ชื่อบัญชีร้านสำหรับตรวจสลิป"]];
 const TEAM = [["Big", "Owner", "ทุกสิทธิ์"], ["มิ้น", "Builder", "สร้างเว็บ · ส่งลูกค้า"], ["ต้น", "Builder", "สร้างเว็บ · ตอบแชท"], ["ผู้ทำบัญชี", "Accountant", "ดูการเงินอย่างเดียว"]];
 export default function Settings() {
   return (<>

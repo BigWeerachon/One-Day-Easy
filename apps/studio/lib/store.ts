@@ -47,9 +47,13 @@ export const siteVersions = (siteId: string) => q<SiteVersion>(`select site_id "
 
 const DOC_COLS = `d.no, d.type, d.client_id "clientId", c.name "clientName", d.job_id "jobId", d.total_satang::int total, d.paid_satang::int paid, d.status, d.issued_at::text "issuedAt", d.revision`;
 export const listDocs = (clientId?: string) => q<Doc>(`select ${DOC_COLS} from documents d join clients c on c.id = d.client_id where ($1::uuid is null or d.client_id = $1) order by d.issued_at desc, d.no desc`, [clientId ?? null]);
-export const listSlips = (status = "pending") => q<Slip & { due: number; clientName: string }>(
-  `select s.id::text, s.doc_no "docNo", s.amount_satang::int amount, s.status, s.created_at::text at, (d.total_satang - d.paid_satang)::int due, c.name "clientName"
-   from slips s join documents d on d.no = s.doc_no join clients c on c.id = d.client_id where s.status = $1 order by s.created_at`, [status]);
+export interface SlipRow extends Slip { due: number | null; clientName: string | null; clientId: string | null; source: string; ref: string | null; bank: string | null; paidAt: string | null; checks: { rule: string; ok: boolean; detail: string }[] | null; read: Record<string, unknown> | null; hasImage: boolean; decidedBy: string | null }
+export const listSlips = (status = "pending") => q<SlipRow>(
+  `select s.id::text, s.doc_no "docNo", s.amount_satang::int amount, s.status, s.created_at::text at,
+     (d.total_satang - d.paid_satang)::int due, c.name "clientName", c.id "clientId", s.source, s.ref, s.bank, s.paid_at::text "paidAt",
+     s.checks, s.read, exists (select 1 from slip_images i where i.slip_id = s.id) "hasImage", s.decided_by "decidedBy"
+   from slips s left join documents d on d.no = s.doc_no left join clients c on c.id = coalesce(s.client_id, d.client_id)
+   where s.status = $1 order by s.created_at desc limit 50`, [status]);
 export const listCatalog = () => q<CatalogItem>(`select code, name, price_satang::int price, recurring from catalog_items where active order by price_satang`);
 
 export const listThreads = () => q<{ clientId: string; name: string; color: string; channel: string; last: string; unread: number }>(
@@ -148,19 +152,38 @@ export async function addSlip(docNo: string, amount: number) {
   });
 }
 
-export async function verifySlip(slipId: string, accept: boolean, by = "Big") {
-  await tx(async (c) => {
-    const [s] = await rows<{ doc_no: string; amount_satang: string; status: string }>(c, `select * from slips where id = $1 for update`, [slipId]);
+export async function verifySlip(slipId: string, accept: boolean, by = "Big", assignDoc?: string) {
+  await tx(async (c) => verifySlipTx(c, slipId, accept, by, assignDoc));
+}
+async function verifySlipTx(c: Db, slipId: string, accept: boolean, by: string, assignDoc?: string) {
+  {
+    const [s] = await rows<{ doc_no: string; amount_satang: string | null; status: string; read: { amount?: number | null } | null }>(c, `select * from slips where id = $1 for update`, [slipId]);
     if (!s || s.status !== "pending") throw new Error("สลิปนี้ตรวจไปแล้ว");
-    const [d] = await rows<{ no: string; client_id: string; job_id: string | null; total_satang: string; paid_satang: string }>(c, `select * from documents where no = $1 for update`, [s.doc_no]);
+    if (accept && !s.doc_no) {
+      if (!assignDoc) throw new Error("สลิปนี้ยังไม่ได้จับคู่ใบแจ้งหนี้ · เลือกใบก่อนยืนยัน");
+      const amt = s.amount_satang ?? (s.read?.amount != null ? Math.round(s.read.amount * 100) : null);
+      if (!amt) throw new Error("ไม่มียอดเงินของสลิปนี้");
+      const [okDoc] = await rows(c, `select 1 from documents d join slips s on s.id = $2 where d.no = $1 and d.status = 'issued' and (s.client_id is null or s.client_id = d.client_id)`, [assignDoc, slipId]);
+      if (!okDoc) throw new Error(`ใบ ${assignDoc} ไม่ใช่ใบค้างชำระของลูกค้ารายนี้`);
+      await c.query(`update slips set doc_no = $2, amount_satang = $3 where id = $1`, [slipId, assignDoc, amt]);
+      s.doc_no = assignDoc; s.amount_satang = String(amt);
+    }
+    if (!accept) {
+      await c.query(`update slips set status = 'rejected', verified_by = $2, decided_by = $2 where id = $1`, [slipId, by]);
+      const [d0] = s.doc_no ? await rows<{ job_id: string | null }>(c, `select job_id from documents where no = $1`, [s.doc_no]) : [];
+      await emit(c, "slip.rejected", { jobId: d0?.job_id, actor: by, source: by === "auto" ? "system" : "human" });
+      return;
+    }
+    const [d] = await rows<{ no: string; client_id: string; job_id: string | null; total_satang: string; paid_satang: string; status: string }>(c, `select * from documents where no = $1 for update`, [s.doc_no]);
     const amount = Number(s.amount_satang);
-    await c.query(`update slips set status = $2, verified_by = $3 where id = $1`, [slipId, accept ? "verified" : "rejected", by]);
-    await emit(c, accept ? "slip.verified" : "slip.rejected", { jobId: d.job_id, actor: by, source: "human", after: amount });
-    if (!accept) return;
+    if (d.status !== "issued") throw new Error(`ใบ ${d.no} ไม่ได้อยู่ในสถานะค้างชำระ`);
+    if (amount > Number(d.total_satang) - Number(d.paid_satang)) throw new Error(`ยอดสลิป ${(amount / 100).toLocaleString()}฿ เกินยอดค้าง ${((Number(d.total_satang) - Number(d.paid_satang)) / 100).toLocaleString()}฿ ของ ${d.no} · ตรวจว่าเป็นสลิปซ้ำหรือไม่`);
+    await c.query(`update slips set status = 'verified', verified_by = $2, decided_by = $2 where id = $1`, [slipId, by]);
+    await emit(c, "slip.verified", { jobId: d.job_id, actor: by, source: by === "auto" ? "system" : "human", after: amount });
     const paid = Number(d.paid_satang) + amount, total = Number(d.total_satang);
     await c.query(`insert into payments (doc_no, amount_satang, method) values ($1,$2,'promptpay')`, [d.no, amount]);
     await c.query(`update documents set paid_satang = $2, status = case when $2 >= total_satang then 'paid' else status end where no = $1`, [d.no, paid]);
-    await emit(c, "payment.recorded", { jobId: d.job_id, actor: by, source: "human", after: paid });
+    await emit(c, "payment.recorded", { jobId: d.job_id, actor: by, source: by === "auto" ? "system" : "human", after: paid });
     if (paid < total) return;
     await c.query(`insert into document_events (doc_no, kind) values ($1, 'paid')`, [d.no]);
     await issueDocTx(c, "RC", d.client_id, total, d.job_id);
@@ -168,7 +191,7 @@ export async function verifySlip(slipId: string, accept: boolean, by = "Big") {
       const [j] = await rows<{ stage: Stage }>(c, `select stage from jobs where id = $1`, [d.job_id]);
       if (j?.stage === "payment") await moveJobTx(c, d.job_id, "online", "system");
     }
-  });
+  }
 }
 
 export async function voidDoc(no: string) {
@@ -249,7 +272,7 @@ export async function runDueLineTasks(limit = 20) {
 
 export interface IncomingLine { userId: string; messageId: string; text: string; displayName: string | null }
 /** ข้อความเข้าจาก LINE webhook · ลูกค้าใหม่ → สร้าง client + งาน · ส่งซ้ำ (redelivery) ไม่บันทึกซ้ำ */
-export async function receiveLineMessage(m: IncomingLine): Promise<"new" | "duplicate"> {
+export async function receiveLineMessage(m: IncomingLine): Promise<{ status: "new" | "duplicate"; clientId: string }> {
   return tx(async (c) => {
     let [ct] = await rows<{ client_id: string }>(c, `select client_id from contacts where channel = 'LINE' and value = $1`, [m.userId]);
     if (!ct) {
@@ -264,11 +287,11 @@ export async function receiveLineMessage(m: IncomingLine): Promise<"new" | "dupl
     let [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [ct.client_id]);
     if (!cv) [cv] = await rows<{ id: string }>(c, `insert into conversations (client_id, channel) values ($1,'LINE') returning id`, [ct.client_id]);
     const ins = await rows(c, `insert into messages (conversation_id, sender, body, external_id) values ($1,'client',$2,$3) on conflict (external_id) do nothing returning id`, [cv.id, m.text, `line:${m.messageId}`]);
-    if (!ins.length) return "duplicate";
+    if (!ins.length) return { status: "duplicate" as const, clientId: ct.client_id };
     await c.query(`update clients set last_contact_at = now() where id = $1`, [ct.client_id]);
     const [job] = await rows<{ id: string }>(c, `select id from jobs where client_id = $1 order by created_at desc limit 1`, [ct.client_id]);
     await emit(c, "message.received", { jobId: job?.id, actor: "client", source: "system", after: "line" });
-    return "new";
+    return { status: "new" as const, clientId: ct.client_id };
   });
 }
 
@@ -375,3 +398,87 @@ export async function rejectProposal(id: string) {
 }
 /** KPI: token เฉลี่ยต่อเว็บ (จากข้อเสนอที่ AI สร้าง) */
 export const avgTokensPerSite = async () => Number((await one<{ v: string | null }>(`select avg(t) v from (select sum(coalesce(input_tokens,0) + coalesce(output_tokens,0)) t from patch_proposals group by site_id) x`))?.v ?? 0);
+
+// ---------- ตรวจสลิปอัตโนมัติ ----------
+import { evaluateSlip, type SlipRead } from "./slip-rules";
+import { readSlip, aiConfigured, type SlipImageMime } from "./ai";
+
+export const slipAutoApprove = () => (process.env.SLIP_AUTO_APPROVE ?? "on") !== "off";
+const list = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+
+/** เก็บรูปสลิปเป็นรายการรอตรวจ · คืน null ถ้าข้อความ LINE นี้เคยรับแล้ว */
+export async function createSlipFromImage(input: { clientId: string | null; source: "line" | "upload"; lineMessageId?: string; bytes: Buffer; mime: SlipImageMime }) {
+  return tx(async (c) => {
+    const [s] = await rows<{ id: string }>(c, `insert into slips (client_id, source, line_message_id) values ($1,$2,$3) on conflict (line_message_id) do nothing returning id::text`,
+      [input.clientId, input.source, input.lineMessageId ?? null]);
+    if (!s) return null;
+    await c.query(`insert into slip_images (slip_id, mime, bytes) values ($1,$2,$3)`, [s.id, input.mime, input.bytes]);
+    await emit(c, "slip.received", { actor: input.source === "line" ? "client" : "human", source: "system", after: { slip: s.id, via: input.source } });
+    return s.id;
+  });
+}
+
+export const slipImage = (id: string) => one<{ mime: string; bytes: Buffer }>(`select mime, bytes from slip_images where slip_id = $1`, [id]);
+
+/** อ่านสลิปด้วย Claude → ตรวจกฎ → อนุมัติเองถ้าผ่านทุกข้อ (และเปิด SLIP_AUTO_APPROVE) · ไม่ผ่านข้อใด = รอคนตรวจ */
+export async function processSlip(slipId: string): Promise<{ outcome: "approved" | "review"; reason?: string }> {
+  const s = await one<{ client_id: string | null; status: string }>(`select client_id, status from slips where id = $1`, [slipId]);
+  const img = await slipImage(slipId);
+  if (!s || !img || s.status !== "pending") return { outcome: "review", reason: "ไม่พบสลิปหรือตรวจไปแล้ว" };
+  if (!aiConfigured()) {
+    await q(`update slips set checks = $2 where id = $1`, [slipId, JSON.stringify([{ rule: "อ่านสลิปอัตโนมัติ", ok: false, detail: "ยังไม่ได้ตั้ง ANTHROPIC_API_KEY" }])]);
+    return { outcome: "review", reason: "no-ai" };
+  }
+  let read: SlipRead;
+  try { read = (await readSlip(img.bytes, img.mime as SlipImageMime)).data; }
+  catch (e) {
+    await q(`update slips set checks = $2 where id = $1`, [slipId, JSON.stringify([{ rule: "อ่านสลิปอัตโนมัติ", ok: false, detail: (e as Error).message }])]);
+    return { outcome: "review", reason: "read-failed" };
+  }
+  return tx(async (c) => {
+    const docs = s.client_id ? await rows<{ no: string; due: number; issuedAt: string }>(c,
+      `select no, (total_satang - paid_satang)::int due, issued_at::text "issuedAt" from documents where client_id = $1 and status = 'issued' and type in ('INV','RN') for update`, [s.client_id]) : [];
+    const [{ used }] = await rows<{ used: boolean }>(c, `select exists (select 1 from slips where ref = $1 and status <> 'rejected' and id <> $2) used`, [read.ref ?? "", slipId]);
+    const r = evaluateSlip(read, docs, {
+      receiver: { names: list(process.env.SHOP_RECEIVER_NAMES), accountDigits: list(process.env.SHOP_RECEIVER_ACCOUNTS) },
+      refUsed: used, now: new Date(), maxAgeDays: Number(process.env.SLIP_MAX_AGE_DAYS ?? 3),
+    });
+    await c.query(`update slips set read = $2, checks = $3, ref = $4, bank = $5, paid_at = $6, amount_satang = $7, doc_no = $8 where id = $1`,
+      [slipId, JSON.stringify(read), JSON.stringify(r.checks), used ? null : read.ref, read.bank, read.paid_at && !isNaN(Date.parse(read.paid_at)) ? read.paid_at : null, r.amount, r.doc?.no ?? null]);
+    if (r.allPass && slipAutoApprove()) {
+      await verifySlipTx(c, slipId, true, "auto");
+      return { outcome: "approved" as const };
+    }
+    const failed = r.checks.filter((x) => !x.ok).map((x) => x.rule).join(", ");
+    await emit(c, "slip.needs_review", { actor: "system", source: "system", after: { slip: slipId, review: failed || "auto-approve off" } });
+    return { outcome: "review" as const, reason: failed || "ปิดการอนุมัติอัตโนมัติ" };
+  });
+}
+
+/** ข้อความจากระบบถึงลูกค้า (เช่น แจ้งผลสลิป) · ไม่เปลี่ยนสถานะอ่านแล้วของแชท */
+export async function sendSystemMessage(clientId: string, text: string) {
+  const to = await lineUserIdOf(clientId);
+  const taskId = await tx(async (c) => {
+    const [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [clientId]);
+    if (!cv) return null;
+    const [m] = await rows<{ id: string }>(c, `insert into messages (conversation_id, sender, body, read_at, delivery) values ($1,'system',$2,now(),$3) returning id::text`, [cv.id, text, to ? "pending" : "none"]);
+    if (!to) return null;
+    const [t] = await rows<{ id: string }>(c, `insert into tasks (name, idempotency_key, payload) values ('line.push · แจ้งลูกค้า', $1, $2) returning id::text`,
+      [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID() })]);
+    return t.id;
+  });
+  if (taskId) await runLinePush(taskId);
+}
+
+export const hasOpenInvoice = async (clientId: string) =>
+  Boolean(await one(`select 1 from documents where client_id = $1 and status = 'issued' and type in ('INV','RN') limit 1`, [clientId]));
+
+/** หลังอ่านสลิป: แจ้งลูกค้าทาง LINE */
+export async function notifySlipResult(slipId: string, outcome: "approved" | "review") {
+  const s = await one<{ client_id: string | null; doc_no: string | null; amount: number | null }>(`select coalesce(s.client_id, d.client_id) client_id, s.doc_no, s.amount_satang::int amount from slips s left join documents d on d.no = s.doc_no where s.id = $1`, [slipId]);
+  if (!s?.client_id) return;
+  const rc = outcome === "approved" ? await one<{ no: string }>(`select no from documents where type = 'RC' and client_id = $1 order by no desc limit 1`, [s.client_id]) : undefined;
+  await sendSystemMessage(s.client_id, outcome === "approved"
+    ? `ได้รับชำระ ${((s.amount ?? 0) / 100).toLocaleString("th-TH")} บาท สำหรับ ${s.doc_no} เรียบร้อยแล้ว ขอบคุณค่ะ 🙏${rc ? ` (ใบเสร็จ ${rc.no})` : ""}`
+    : "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบและจะแจ้งกลับโดยเร็ว");
+}
