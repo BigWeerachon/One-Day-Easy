@@ -188,8 +188,9 @@ async function verifySlipTx(c: Db, slipId: string, accept: boolean, by: string, 
     await c.query(`insert into document_events (doc_no, kind) values ($1, 'paid')`, [d.no]);
     await issueDocTx(c, "RC", d.client_id, total, d.job_id);
     if (d.job_id) {
-      const [j] = await rows<{ stage: Stage }>(c, `select stage from jobs where id = $1`, [d.job_id]);
-      if (j?.stage === "payment") await moveJobTx(c, d.job_id, "online", "system");
+      // ขึ้นออนไลน์เมื่อไม่เหลือใบแจ้งหนี้ค้างของงานนี้แล้วเท่านั้น (งานหนึ่งอาจมีหลายใบ เช่น ค่าแก้เพิ่ม)
+      const [j] = await rows<{ stage: Stage; open: number }>(c, `select stage, (select count(*)::int from documents where job_id = $1 and type = 'INV' and status = 'issued') open from jobs where id = $1`, [d.job_id]);
+      if (j?.stage === "payment" && j.open === 0) await moveJobTx(c, d.job_id, "online", "system");
     }
   }
 }
@@ -407,13 +408,13 @@ export const slipAutoApprove = () => (process.env.SLIP_AUTO_APPROVE ?? "on") !==
 const list = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 
 /** เก็บรูปสลิปเป็นรายการรอตรวจ · คืน null ถ้าข้อความ LINE นี้เคยรับแล้ว */
-export async function createSlipFromImage(input: { clientId: string | null; source: "line" | "upload"; lineMessageId?: string; bytes: Buffer; mime: SlipImageMime }) {
+export async function createSlipFromImage(input: { clientId: string | null; source: "line" | "upload" | "portal"; lineMessageId?: string; bytes: Buffer; mime: SlipImageMime }) {
   return tx(async (c) => {
     const [s] = await rows<{ id: string }>(c, `insert into slips (client_id, source, line_message_id) values ($1,$2,$3) on conflict (line_message_id) do nothing returning id::text`,
       [input.clientId, input.source, input.lineMessageId ?? null]);
     if (!s) return null;
     await c.query(`insert into slip_images (slip_id, mime, bytes) values ($1,$2,$3)`, [s.id, input.mime, input.bytes]);
-    await emit(c, "slip.received", { actor: input.source === "line" ? "client" : "human", source: "system", after: { slip: s.id, via: input.source } });
+    await emit(c, "slip.received", { actor: input.source === "upload" ? "human" : "client", source: "system", after: { slip: s.id, via: input.source } });
     return s.id;
   });
 }

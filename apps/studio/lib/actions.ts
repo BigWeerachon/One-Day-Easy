@@ -148,3 +148,15 @@ export async function uploadSlipAction(f: FormData) { const me = await requireSt
 export async function reprocessSlipAction(f: FormData) { const me = await requireStaff("finance.edit");
   await run("/finance", async () => { await S.processSlip(str(f, "slip")); });
 }
+
+// ---------- Portal ----------
+import { sendPortalLink } from "./portal";
+export async function sendPortalLinkAction(f: FormData) {
+  const me = await requireStaff("clients.edit");
+  const id = str(f, "client");
+  let to = `/clients/${id}`;
+  try { const r = await sendPortalLink(id, me.name); to += `?portal=${r.token}&sent=${r.sent ? 1 : 0}`; }
+  catch (e) { to += `?err=${encodeURIComponent((e as Error).message)}`; }
+  revalidatePath("/", "layout");
+  redirect(to);
+}
