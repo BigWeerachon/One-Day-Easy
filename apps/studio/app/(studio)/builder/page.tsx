@@ -2,13 +2,16 @@ import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { listSites, getSite, getJob, listJobs, siteVersions, listClients, listProposals, clientFiles } from "@/lib/store";
 import { previewUrl, liveUrl } from "@/lib/preview";
-import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction, proposePatchAction, applyProposalAction, rejectProposalAction } from "@/lib/actions";
+import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction, proposePatchAction, applyProposalAction, rejectProposalAction, attachDomainAction, checkDomainAction, removeDomainAction, quoteDomainAction, buyDomainAction } from "@/lib/actions";
+import { listSiteDomains, maxPriceUsd, type Quote } from "@/lib/domains";
+import { vercelConfigured } from "@/lib/vercel";
+import { can } from "@/lib/permissions";
 import { aiConfigured, MODEL } from "@/lib/ai";
 import SubmitButton from "@/components/SubmitButton";
 import { TEMPLATES, BLOCKS, runChecks } from "@/lib/blocks";
 import { Header, Card, Err } from "@/components/ui";
 import JobActions from "@/components/JobActions";
-export default async function Builder({ searchParams }: { searchParams: Promise<{ site?: string; job?: string; block?: string; err?: string }> }) {
+export default async function Builder({ searchParams }: { searchParams: Promise<{ site?: string; job?: string; block?: string; err?: string; quote?: string }> }) {
   const me = await requirePage("sites.edit");
   const sp = await searchParams;
   const [sites, clients] = await Promise.all([listSites(), listClients()]);
@@ -34,7 +37,9 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
   const checks = runChecks(tpl, site.config); const passed = checks.filter((c) => c.ok).length;
   const siteJob = job ?? (await listJobs(site.clientId)).find((j) => j.siteId === site.id && !["online", "care"].includes(j.stage));
   const block = sp.block && tpl.blocks.includes(sp.block) ? sp.block : tpl.blocks[0];
-  const [versions, proposals, files] = await Promise.all([siteVersions(site.id), listProposals(site.id), clientFiles(site.clientId)]);
+  const [versions, proposals, files, domains] = await Promise.all([siteVersions(site.id), listProposals(site.id), clientFiles(site.clientId), listSiteDomains(site.id)]);
+  let quote: Quote | null = null; try { quote = sp.quote ? JSON.parse(sp.quote) as Quote : null; } catch { quote = null; }
+  const canBuy = can(me.role, "domains.buy");
   const pv = previewUrl(site.id);
   const ai = aiConfigured();
   return (<>
@@ -91,6 +96,33 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
         <div className="side" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <Card title="ตรวจอัตโนมัติก่อนส่ง" right={<span className={"chip " + (passed === 6 ? "c-g" : "c-r")}>{passed}/6</span>}><div className="list">{checks.map((c) => <div key={c.name} className="sm">{c.ok ? "✅" : "❌"} {c.name}</div>)}</div><div className="sm mut" style={{ marginTop: 8 }}>ผลตรวจบันทึกลงงานทุกครั้งที่กดบันทึก</div></Card>
           {siteJob && <Card title={`งาน · ${siteJob.title}`}><div className="sm mut" style={{ marginBottom: 8 }}>ตรวจผ่านที่บันทึกไว้ {siteJob.checksPassed}/6</div><JobActions job={siteJob} back={`/builder?site=${site.id}`} /></Card>}
+          <Card title="โดเมน" right={<span className="sm mut">{vercelConfigured() ? "SSL ออกอัตโนมัติเมื่อ DNS ถูก" : "ยังไม่ได้ตั้ง VERCEL_TOKEN / ENGINE_PROJECT_ID"}</span>}>
+            <div className="sm" style={{ marginBottom: 8 }}><span className="mono">{site.domain}</span> <span className="chip c-g">โดเมนระบบ</span></div>
+            {domains.map((d) => (
+              <div key={d.id} className="card" style={{ padding: 12, marginBottom: 10 }}>
+                <div className="f" style={{ justifyContent: "space-between" }}><b className="mono">{d.domain}</b>
+                  <span className={"chip " + (d.status === "active" ? "c-g" : d.status === "error" ? "c-r" : "c-y")}>{d.status === "active" ? "ใช้งานแล้ว" : d.status === "error" ? "ผิดพลาด" : "รอ DNS"}</span></div>
+                <div className="sm" style={{ margin: "6px 0" }}>{d.verified ? "✅" : "⏳"} ยืนยันเจ้าของ · {d.dnsOk ? "✅" : "⏳"} DNS · {d.sslOk ? "✅" : "⏳"} SSL{d.source === "purchase" ? ` · ซื้อ $${d.priceUsd}` : ""}</div>
+                {d.status !== "active" && d.dnsHint && <div className="list sm" style={{ gap: 6, marginBottom: 6 }}><div className="mut">ให้ลูกค้าตั้ง DNS ที่ผู้ให้บริการโดเมน:</div>{d.dnsHint.records.map((r, i) => <div key={i} style={{ background: "#f7f8fb", borderRadius: 8, padding: "6px 8px" }}><b className="mono">{r.type}</b> <span className="mono">{r.name}</span> <span className="mut">· {r.why}</span><div className="mono" style={{ wordBreak: "break-all" }}>{r.value}</div></div>)}</div>}
+                {d.lastError && <div className="sm" style={{ color: "#c62828" }}>{d.lastError}</div>}
+                <div className="f" style={{ marginTop: 6 }}>
+                  {d.status !== "active" && <form action={checkDomainAction}><input type="hidden" name="site" value={site.id} /><input type="hidden" name="id" value={d.id} /><SubmitButton className="btn o sm" pending="กำลังตรวจ…">ตรวจอีกครั้ง</SubmitButton></form>}
+                  <form action={removeDomainAction}><input type="hidden" name="site" value={site.id} /><input type="hidden" name="id" value={d.id} /><button className="btn r sm">ถอดโดเมน</button></form>
+                </div>
+              </div>))}
+            <form action={attachDomainAction} className="f" style={{ marginTop: 6 }}><input type="hidden" name="site" value={site.id} />
+              <input className="inp" name="domain" placeholder="โดเมนที่ลูกค้ามี เช่น kruapadaeng.com" style={{ flex: 1 }} required />
+              <SubmitButton className="btn o sm" pending="กำลังผูก…">ผูกโดเมน</SubmitButton></form>
+            {canBuy && <div style={{ marginTop: 14, borderTop: "1px solid #eef0f4", paddingTop: 12 }}>
+              <div className="sm mut" style={{ marginBottom: 6 }}>ซื้อโดเมนใหม่ (Owner · เพดาน ${maxPriceUsd()})</div>
+              <form action={quoteDomainAction} className="f"><input type="hidden" name="site" value={site.id} /><input className="inp" name="domain" placeholder="เช่น kruapadaeng.com" defaultValue={quote?.domain ?? ""} style={{ flex: 1 }} required /><SubmitButton className="btn o sm" pending="กำลังเช็ก…">เช็กราคา</SubmitButton></form>
+              {quote && (quote.available ? <div className="note" style={{ marginTop: 8 }}>
+                <b className="mono">{quote.domain}</b> ว่าง · ${quote.priceUsd} / {quote.years} ปี (ต่ออายุ ${quote.renewalUsd}/ปี){quote.overCap && <div style={{ color: "#c62828" }}>เกินเพดาน ซื้อไม่ได้</div>}
+                {!quote.overCap && <form action={buyDomainAction} className="f" style={{ marginTop: 8 }}><input type="hidden" name="site" value={site.id} /><input type="hidden" name="domain" value={quote.domain} /><input type="hidden" name="price" value={String(quote.priceUsd)} />
+                  <input className="inp" name="confirm" placeholder={`พิมพ์ ${quote.domain} เพื่อยืนยัน`} required autoComplete="off" style={{ flex: 1 }} /><SubmitButton className="btn sm" pending="กำลังซื้อ…">{`ซื้อ $${quote.priceUsd}`}</SubmitButton></form>}
+              </div> : <div className="sm" style={{ color: "#c62828", marginTop: 8 }}>{quote.domain} ไม่ว่าง</div>)}
+            </div>}
+          </Card>
           <Card title="รูปจากลูกค้า" right={<span className="sm mut">ใช้ในบล็อกด้วย "file:&lt;id&gt;"</span>}>
             {files.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>{files.map((f) => <div key={f.id} className="sm" style={{ textAlign: "center" }}><img src={`/api/files/${f.id}`} alt={`รูป ${f.id}`} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8 }} /><span className="mono">file:{f.id}</span></div>)}</div> : <span className="sm mut">ลูกค้ายังไม่ได้ส่งรูป</span>}
           </Card>

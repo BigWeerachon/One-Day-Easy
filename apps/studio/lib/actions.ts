@@ -160,3 +160,29 @@ export async function sendPortalLinkAction(f: FormData) {
   revalidatePath("/", "layout");
   redirect(to);
 }
+
+// ---------- โดเมน ----------
+import * as D from "./domains";
+export async function attachDomainAction(f: FormData) {
+  const me = await requireStaff("sites.edit"); const site = str(f, "site");
+  await run(`/builder?site=${site}`, () => D.attachDomain(site, str(f, "domain"), me.name));
+}
+export async function checkDomainAction(f: FormData) {
+  await requireStaff("sites.edit"); const site = str(f, "site");
+  await run(`/builder?site=${site}`, () => D.checkDomain(str(f, "id")));
+}
+export async function removeDomainAction(f: FormData) {
+  await requireStaff("sites.edit"); const site = str(f, "site");
+  await run(`/builder?site=${site}`, () => D.removeDomain(str(f, "id")));
+}
+export async function quoteDomainAction(f: FormData) {
+  await requireStaff("domains.buy"); const site = str(f, "site");
+  let to = `/builder?site=${site}`;
+  try { const qt = await D.quoteDomain(str(f, "domain")); to += `&quote=${encodeURIComponent(JSON.stringify(qt))}`; }
+  catch (e) { to += `&err=${encodeURIComponent((e as Error).message)}`; }
+  redirect(to);
+}
+export async function buyDomainAction(f: FormData) {
+  const me = await requireStaff("domains.buy"); const site = str(f, "site");
+  await run(`/builder?site=${site}`, () => D.purchaseDomain(site, str(f, "domain"), str(f, "confirm"), Number(str(f, "price")), me.name));
+}

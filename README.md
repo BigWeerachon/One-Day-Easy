@@ -33,6 +33,15 @@
 
 แอปต่อ Postgres ตรงจากฝั่ง server (`lib/db.ts`, ไลบรารี `pg`) — รหัสผ่านไม่ถูกส่งไป browser. ทุกการเปลี่ยนเงิน/ขั้นงานอยู่ใน transaction เดียว และ trigger ในฐานข้อมูลตรวจการเปลี่ยนขั้นซ้ำอีกชั้น
 
+## โดเมน + SSL อัตโนมัติ
+
+การ์ด **โดเมน** ในหน้าสร้างเว็บ · ใช้ Vercel REST API กับโปรเจกต์ Site Engine · migration `0008_domains.sql`
+
+- **ผูกโดเมนที่ลูกค้ามี** (Builder/Owner): เพิ่มเข้าโปรเจกต์ Engine → แสดงเรคคอร์ด DNS ที่ลูกค้าต้องตั้ง (TXT ยืนยัน + A/CNAME) → cron `/api/cron/domains` ตรวจทุก 10 นาที: ยืนยันเจ้าของ → DNS ถูก → https ใช้ได้ → **ใช้งาน** (Vercel ออก SSL ให้เอง) · Engine เปิดเว็บที่โดเมนนี้เมื่อพร้อมแล้วเท่านั้น
+- **ซื้อโดเมนใหม่** (Owner เท่านั้น · สิทธิ์ `domains.buy`): เช็กว่าง+ราคา → พิมพ์ชื่อโดเมนยืนยัน → ซื้อด้วย `expectedPrice` เท่ากับราคาที่เห็น (ราคาเปลี่ยน = ไม่ซื้อ) · เพดาน `DOMAIN_MAX_PRICE_USD` · กันกดซ้ำ · จดในชื่อบริษัท (`REGISTRANT_*`)
+- ถอดโดเมนได้ · event `domain.attached`, `ssl.issued`
+- env: `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `ENGINE_PROJECT_ID`, `PLATFORM_DOMAIN`, `DOMAIN_MAX_PRICE_USD`, `REGISTRANT_*`
+
 ## PDF ใบแจ้งหนี้ / ใบเสร็จ
 
 ปุ่ม **PDF** ในหน้าการเงินและหน้าลูกค้า (สิทธิ์ดูการเงิน) · ลูกค้าดาวน์โหลดใบแจ้งหนี้และใบเสร็จของตัวเองใน Portal
