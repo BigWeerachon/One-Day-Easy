@@ -11,7 +11,7 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
   const sla = (h: number | null) => h ?? 999;
   const queue = [
     ...jobs.filter((j) => j.stage === "template").map((j) => ({ t: j.siteId ? "ปรับเนื้อหาก่อนส่งลูกค้า" : "เลือกเทมเพลต", sla: sla(j.slaHours), d: `${j.title} · ${j.siteId ? `ร่าง ${j.template} · ตรวจผ่าน ${j.checksPassed}/6` : "ข้อมูลครบจากฟอร์มลูกค้า"}`, href: `/builder?job=${j.id}`, cta: j.siteId ? "เปิดปรับแก้" : "เลือกเทมเพลต" })),
-    ...slips.filter((s) => s.amount !== s.due).map((s) => ({ t: "สลิปไม่ตรงยอด", sla: -1, d: `${s.clientName} · ${s.docNo} · สลิป ${baht(s.amount)} ยอดค้าง ${baht(s.due)}`, href: "/finance", cta: "ตรวจ" })),
+    ...slips.map((s) => ({ t: "สลิปรอตรวจ", sla: -1, d: `${s.clientName ?? "ไม่ทราบลูกค้า"}${s.docNo ? ` · ${s.docNo}` : ""} · ${(s.checks ?? []).filter((c) => !c.ok).map((c) => c.rule).join(", ") || (s.amount != null && s.due != null && s.amount !== s.due ? `สลิป ${baht(s.amount)} ยอดค้าง ${baht(s.due)}` : "รอคนยืนยัน")}`, href: "/finance", cta: "ตรวจ" })),
     ...jobs.filter((j) => j.stage === "client_review" && sla(j.slaHours) < 0).map((j) => ({ t: "ลูกค้าไม่ตอบเกินกำหนด", sla: sla(j.slaHours), d: `${j.title} · เกินมา ${-sla(j.slaHours)} ชม.`, href: `/clients/${j.clientId}`, cta: "เปิดโปรไฟล์" })),
     ...tasks.filter((t) => t.status === "dead").map((t) => ({ t: "งานอัตโนมัติล้มเหลว", sla: -99, d: `${t.name} · ${t.error} (dead-letter)`, href: "/workflow", cta: "ดูงาน" })),
   ].sort((a, b) => a.sla - b.sla);

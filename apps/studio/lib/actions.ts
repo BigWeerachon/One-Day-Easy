@@ -50,7 +50,7 @@ export async function addSlipAction(f: FormData) {
     await S.addSlip(str(f, "doc"), amount);
   });
 }
-export async function verifySlipAction(f: FormData) { await run("/finance", () => S.verifySlip(str(f, "slip"), f.get("accept") === "1")); }
+export async function verifySlipAction(f: FormData) { await run("/finance", () => S.verifySlip(str(f, "slip"), f.get("accept") === "1", "Big", str(f, "doc") || undefined)); }
 export async function voidDocAction(f: FormData) { await run("/finance", () => S.voidDoc(str(f, "doc"))); }
 export async function retryTaskAction(f: FormData) { await run("/workflow", () => S.retryTask(str(f, "task"))); }
 export async function replyAction(f: FormData) {
@@ -128,4 +128,22 @@ export async function applyProposalAction(f: FormData) {
 export async function rejectProposalAction(f: FormData) {
   const site = str(f, "site");
   await run(`/builder?site=${site}`, () => S.rejectProposal(str(f, "proposal")));
+}
+
+// ---------- ตรวจสลิปอัตโนมัติ ----------
+const SLIP_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+export async function uploadSlipAction(f: FormData) {
+  await run("/finance", async () => {
+    const file = f.get("image");
+    if (!(file instanceof File) || file.size === 0) throw new Error("เลือกรูปสลิปก่อน");
+    if (file.size > 5 * 1024 * 1024) throw new Error("รูปใหญ่เกิน 5 MB");
+    const mime = SLIP_MIME.find((m) => m === file.type);
+    if (!mime) throw new Error("รองรับเฉพาะรูป JPG, PNG, WebP, GIF");
+    const clientId = str(f, "client") || null;
+    const id = await S.createSlipFromImage({ clientId, source: "upload", bytes: Buffer.from(await file.arrayBuffer()), mime });
+    if (id) await S.processSlip(id);
+  });
+}
+export async function reprocessSlipAction(f: FormData) {
+  await run("/finance", async () => { await S.processSlip(str(f, "slip")); });
 }

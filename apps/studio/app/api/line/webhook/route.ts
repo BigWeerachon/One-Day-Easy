@@ -1,9 +1,12 @@
-import { verifySignature, getProfileName, describeMessage, type LineEvent } from "@/lib/line";
-import { receiveLineMessage } from "@/lib/store";
+import { after } from "next/server";
+import { verifySignature, getProfileName, describeMessage, downloadContent, type LineEvent } from "@/lib/line";
+import { receiveLineMessage, hasOpenInvoice, createSlipFromImage, processSlip, notifySlipResult } from "@/lib/store";
 import { revalidatePath } from "next/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const IMAGE_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
 // ตั้งใน LINE Developers → Messaging API → Webhook URL: https://<โดเมน>/api/line/webhook
 export async function POST(req: Request) {
@@ -25,7 +28,23 @@ export async function POST(req: Request) {
       text: describeMessage(ev.message),
       displayName: await getProfileName(ev.source.userId),
     });
-    if (r === "new") saved++;
+    if (r.status !== "new") continue;
+    saved++;
+    // รูปจากลูกค้าที่มีใบค้างชำระ = อาจเป็นสลิป → ตรวจหลังตอบ LINE แล้ว (LINE ต้องการคำตอบเร็ว)
+    if (ev.message.type === "image" && (await hasOpenInvoice(r.clientId))) {
+      const messageId = ev.message.id, clientId = r.clientId;
+      after(async () => {
+        try {
+          const img = await downloadContent(messageId);
+          const mime = IMAGE_MIME.find((m) => m === img.mime) ?? "image/jpeg";
+          const slipId = await createSlipFromImage({ clientId, source: "line", lineMessageId: messageId, bytes: img.bytes, mime });
+          if (!slipId) return;
+          const res = await processSlip(slipId);
+          await notifySlipResult(slipId, res.outcome);
+          revalidatePath("/", "layout");
+        } catch (e) { console.error("slip pipeline", e); }
+      });
+    }
   }
   if (saved) revalidatePath("/", "layout");
   return Response.json({ ok: true, saved });

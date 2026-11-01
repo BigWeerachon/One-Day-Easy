@@ -60,3 +60,13 @@ export function describeMessage(m: NonNullable<LineEvent["message"]>): string {
   if (m.type === "text") return m.text ?? "";
   return ({ image: "[รูปภาพ]", video: "[วิดีโอ]", audio: "[เสียง]", file: "[ไฟล์]", sticker: "[สติกเกอร์]", location: "[ตำแหน่ง]" } as Record<string, string>)[m.type] ?? `[${m.type}]`;
 }
+
+/** ดาวน์โหลดรูปที่ลูกค้าส่งมา (เก็บที่ LINE ชั่วคราว) */
+export async function downloadContent(messageId: string): Promise<{ bytes: Buffer; mime: string }> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!token) throw new LineError("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN", 0, false);
+  const base = process.env.LINE_DATA_API_BASE || "https://api-data.line.me";
+  const res = await fetch(`${base}/v2/bot/message/${encodeURIComponent(messageId)}/content`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new LineError(`ดาวน์โหลดรูปจาก LINE ไม่ได้ (${res.status})`, res.status, res.status >= 500);
+  return { bytes: Buffer.from(await res.arrayBuffer()), mime: (res.headers.get("content-type") ?? "image/jpeg").split(";")[0] };
+}
