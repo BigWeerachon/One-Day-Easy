@@ -33,6 +33,19 @@
 
 แอปต่อ Postgres ตรงจากฝั่ง server (`lib/db.ts`, ไลบรารี `pg`) — รหัสผ่านไม่ถูกส่งไป browser. ทุกการเปลี่ยนเงิน/ขั้นงานอยู่ใน transaction เดียว และ trigger ในฐานข้อมูลตรวจการเปลี่ยนขั้นซ้ำอีกชั้น
 
+## เชื่อม LINE OA (Messaging API)
+
+1. LINE Developers → channel ของ OA → คัดลอก **Channel secret** (Basic settings) และออก **Channel access token (long-lived)** (Messaging API)
+2. ใส่ใน `apps/studio/.env.local` (หรือ Vercel env): `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `CRON_SECRET` (สุ่มยาวๆ)
+3. Messaging API → **Webhook URL** = `https://<โดเมน>/api/line/webhook` → กด Verify → เปิด **Use webhook** · ปิด Auto-reply messages ใน LINE Official Account Manager
+4. รัน `npm run db:setup -w apps/studio` เพื่อเพิ่ม migration `0002_line.sql`
+
+การทำงาน:
+- ข้อความเข้า → ตรวจลายเซ็น → ลูกค้าใหม่สร้าง client + งานอัตโนมัติ (ชื่อจากโปรไฟล์ LINE) · webhook ส่งซ้ำไม่บันทึกซ้ำ
+- ตอบในกล่องข้อความ → งาน `line.push` → ส่งทันที · แสดงสถานะ ✓ ส่งแล้ว / ✗ ส่งไม่สำเร็จ
+- ล้มเหลวชั่วคราว (429/5xx/เครือข่าย) → ลองใหม่ด้วย backoff ผ่าน `/api/cron/line` (Vercel Cron ทุก 5 นาที ใน `vercel.json`) · ครบ 3 ครั้ง หรือ 4xx → dead-letter ให้คนกด "ลองใหม่" ในหน้า Workflow · ใช้ `X-Line-Retry-Key` เดิมทุกครั้ง LINE จึงไม่ส่งซ้ำ
+- ลูกค้าที่เพิ่มด้วยมือยังไม่มี LINE userId → ส่งไม่ได้จนกว่าลูกค้าจะทัก OA มาก่อน (ข้อจำกัดของ LINE)
+
 ```bash
 npm test     # unit tests กฎเงิน/ขั้นงาน/schema
 ```

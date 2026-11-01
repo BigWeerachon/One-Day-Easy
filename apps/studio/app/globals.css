@@ -34,6 +34,7 @@ td{padding:12px 20px;border-bottom:1px solid #eef0f4;vertical-align:middle}
 .tabs{display:flex;gap:4px;background:#f1f3f7;border-radius:10px;padding:4px;flex-wrap:wrap}
 .tab{border:0;background:transparent;padding:6px 12px;border-radius:7px;font:inherit;cursor:pointer;text-decoration:none;color:#3b4254}.tab.on{background:#fff;font-weight:600;box-shadow:0 1px 2px #0001}
 .list{display:flex;flex-direction:column;gap:10px}
+.bubble>div{display:block;margin-top:2px}
 .note{background:#f7f8fb;border:1px dashed #d6dae3;border-radius:10px;padding:10px 14px;font-size:13px;color:#3b4254}
 .qi{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding:14px 20px;border-bottom:1px solid #eef0f4}
 .alert{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;border-radius:12px;padding:12px 18px}
@@ -43,4 +44,4 @@ td{padding:12px 20px;border-bottom:1px solid #eef0f4;vertical-align:middle}
 .err{background:#fdecec;border:1px solid #f5c2c2;color:#c62828;border-radius:10px;padding:10px 14px}
 .code{background:#0f1424;color:#d6e2ff;border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;margin:0}
 .f{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.bubble{max-width:72%;padding:8px 12px;border-radius:12px;background:#f1f3f7}.bubble.me{background:#0b6cf0;color:#fff;margin-left:auto}
+.bubble{display:block;width:fit-content;max-width:72%;padding:8px 12px;border-radius:12px;background:#f1f3f7}.bubble.me{background:#0b6cf0;color:#fff;margin-left:auto}
