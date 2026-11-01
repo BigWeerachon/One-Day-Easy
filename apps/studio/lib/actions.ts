@@ -85,3 +85,47 @@ export async function createSiteAction(f: FormData) {
   revalidatePath("/", "layout");
   redirect(err ? withErr(`/builder?job=${str(f, "job")}`, err) : `/builder?site=${id}`);
 }
+
+// ---------- Claude ----------
+import { extractIntake, proposePatch, aiConfigured } from "./ai";
+const needAi = () => { if (!aiConfigured()) throw new Error("ยังไม่ได้ตั้ง ANTHROPIC_API_KEY"); };
+
+export async function extractIntakeAction(f: FormData) {
+  const id = str(f, "client");
+  await run(`/clients/${id}`, async () => {
+    needAi();
+    const chat = (await S.listMessages(id)).filter((m) => m.from !== "system").slice(-60);
+    if (!chat.length) throw new Error("ยังไม่มีแชทให้สรุป");
+    const { intake, usage } = await extractIntake(chat);
+    await S.saveIntake(id, intake, usage);
+  });
+}
+
+export async function proposePatchAction(f: FormData) {
+  const site = str(f, "site"), instruction = str(f, "instruction");
+  await run(`/builder?site=${site}`, async () => {
+    needAi();
+    if (instruction.length < 3) throw new Error("พิมพ์สิ่งที่อยากให้แก้ก่อน");
+    if (instruction.length > 2000) throw new Error("คำสั่งยาวเกิน 2,000 ตัวอักษร");
+    const s = await S.getSite(site); if (!s) throw new Error("ไม่พบเว็บ");
+    const tpl = TEMPLATES.find((t) => t.id === s.template)!;
+    const notes = await S.clientNotes(s.clientId);
+    const r = await proposePatch({ template: tpl, config: s.config, instruction, notes });
+    const ops = r.ops.map((o) => ({
+      block: o.block, data: o.data,
+      error: o.parseError ?? (!tpl.blocks.includes(o.block) ? `บล็อก ${o.block} ไม่อยู่ในเทมเพลต ${tpl.id}` : validateBlock(o.block, o.data)),
+    }));
+    await S.saveProposal(site, s.version, instruction, r.summary, ops, r.usage);
+  });
+}
+
+const checksFor = (config: Record<string, unknown>, template: string) =>
+  runChecks(TEMPLATES.find((t) => t.id === template)!, config).filter((c) => c.ok).length;
+export async function applyProposalAction(f: FormData) {
+  const site = str(f, "site");
+  await run(`/builder?site=${site}`, () => S.applyProposal(str(f, "proposal"), checksFor));
+}
+export async function rejectProposalAction(f: FormData) {
+  const site = str(f, "site");
+  await run(`/builder?site=${site}`, () => S.rejectProposal(str(f, "proposal")));
+}

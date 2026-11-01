@@ -46,6 +46,14 @@
 - ล้มเหลวชั่วคราว (429/5xx/เครือข่าย) → ลองใหม่ด้วย backoff ผ่าน `/api/cron/line` (Vercel Cron ทุก 5 นาที ใน `apps/studio/vercel.json` · ตั้ง Root Directory ของโปรเจกต์ Vercel เป็น `apps/studio`) · ครบ 3 ครั้ง หรือ 4xx → dead-letter ให้คนกด "ลองใหม่" ในหน้า Workflow · ใช้ `X-Line-Retry-Key` เดิมทุกครั้ง LINE จึงไม่ส่งซ้ำ
 - ลูกค้าที่เพิ่มด้วยมือยังไม่มี LINE userId → ส่งไม่ได้จนกว่าลูกค้าจะทัก OA มาก่อน (ข้อจำกัดของ LINE)
 
+## Claude API
+
+ตั้ง `ANTHROPIC_API_KEY` (จาก console.anthropic.com) แล้วรัน `npm run db:setup -w apps/studio` เพื่อเพิ่ม migration `0003_ai.sql` · โมเดลเริ่มต้น `claude-opus-5-5` (เปลี่ยนได้ด้วย `ANTHROPIC_MODEL`)
+
+- **สรุปข้อมูลจากแชท** (หน้าโปรไฟล์ลูกค้า): อ่านแชทล่าสุด → ชื่อร้าน ประเภท ผู้ติดต่อ เมนู/ราคา เทมเพลตที่แนะนำ และ "ข้อมูลที่ยังขาด" · เติมเฉพาะช่องที่ว่าง · ความชอบด้านดีไซน์เข้า client_notes
+- **ให้ Claude แก้** (หน้าสร้างเว็บ): พิมพ์สิ่งที่อยากแก้ → Claude เสนอ JSON ต่อบล็อก → ตรวจ block schema ทุกบล็อก → แสดงเดิม/ใหม่ → **คนกดใช้เอง** · ใช้ไม่ได้ถ้ามีบล็อกไม่ผ่าน schema หรือเว็บถูกแก้หลังจากเสนอ
+- ใช้ structured outputs, prompt caching (system prompt), refusal fallback (`fallbacks: "default"`) · บันทึก token ทุกครั้ง → KPI "Token ต่อเว็บ" หน้างานวันนี้ · event ไม่เก็บข้อมูลส่วนบุคคล
+
 ```bash
 npm test     # unit tests กฎเงิน/ขั้นงาน/schema
 ```
