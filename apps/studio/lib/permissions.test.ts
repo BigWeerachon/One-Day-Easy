@@ -10,6 +10,10 @@ test("builder ไม่เห็นเงิน ไม่จัดการท�
 test("accountant ทำได้เฉพาะการเงิน", () => {
   assert.ok(can("accountant", "finance.edit")); assert.ok(!can("accountant", "sites.edit")); assert.ok(!can("accountant", "clients.view"));
 });
+test("คิว: builder รันคิวได้แต่ตั้งค่าไม่ได้ · accountant ดูอย่างเดียว", () => {
+  assert.ok(can("builder", "queue.edit")); assert.ok(!can("builder", "queue.setup")); assert.ok(can("owner", "queue.setup"));
+  assert.ok(can("accountant", "queue.view")); assert.ok(!can("accountant", "queue.edit"));
+});
 test("ไม่มีบทบาท = ไม่มีสิทธิ์", () => assert.ok(!can(null, "work.view")));
 test("กฎรหัสผ่าน", () => {
   assert.notEqual(validatePassword("short1"), null);

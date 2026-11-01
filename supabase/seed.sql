@@ -61,3 +61,34 @@ insert into tasks (job_id, name, idempotency_key, attempts, status, last_error) 
  (pg_temp.u('a4'),'draft.generate · Sonnet','a4:draft:v1',1,'running',null),
  (null,'document.send · RN-2611-004','RN-2611-004:send',1,'done',null),
  (null,'site.healthcheck · daily','hc:2026-11-01',1,'done',null);
+
+-- คิว & ตารางงาน (ตัวอย่าง)
+insert into booking_resources (id, name, color, sort) values
+ ('b0000000-0000-4000-8000-000000000001','มิ้น · ทีมเก็บข้อมูล','#0b6cf0',1),
+ ('b0000000-0000-4000-8000-000000000002','Big · ทีมสร้างเว็บ','#7c3aed',2);
+insert into booking_services (code, name, duration_min, buffer_min, max_per_day, price_satang, sort) values
+ ('CONSULT','ปรึกษาและเก็บข้อมูล',30,10,null,0,1),
+ ('ONEDAY','นั่งทำเว็บเสร็จใน 1 วัน',180,30,2,159000,2),
+ ('PHOTO','ถ่ายรูปร้านสำหรับเว็บ',60,30,4,90000,3);
+insert into booking_service_resources values
+ ('CONSULT','b0000000-0000-4000-8000-000000000001'),('CONSULT','b0000000-0000-4000-8000-000000000002'),
+ ('ONEDAY','b0000000-0000-4000-8000-000000000002'),('PHOTO','b0000000-0000-4000-8000-000000000001');
+insert into booking_hours (resource_id, weekday, open_time, close_time) select null, wd, '09:00', '18:00' from generate_series(1,6) wd;
+insert into booking_hours (resource_id, weekday, open_time, close_time) values ('b0000000-0000-4000-8000-000000000002', 6, '10:00', '15:00');
+insert into booking_closures (resource_id, from_date, to_date, reason) values (null, '2026-12-05', '2026-12-05', 'วันพ่อแห่งชาติ');
+-- คิววันนี้และพรุ่งนี้ (เวลาไทย)
+insert into bookings (client_id, customer_name, service_code, resource_id, starts_at, ends_at, busy_until, status, queue_no, source, created_by, confirmed_at, checked_in_at, started_at, finished_at)
+select pg_temp.u(x.c), x.n, x.s, x.r::uuid, st, st + make_interval(mins => sv.duration_min), st + make_interval(mins => sv.duration_min + sv.buffer_min),
+  x.status, x.q, x.src, 'seed', now(), case when x.status in ('checked_in','in_service','done') then now() end, case when x.status in ('in_service','done') then now() end, case when x.status = 'done' then now() end
+from (values
+  ('c1','ครัวป้าแดง','CONSULT','b0000000-0000-4000-8000-000000000001', 0, '09:00','done',1,'line'),
+  ('c3','Lumière Clinic','CONSULT','b0000000-0000-4000-8000-000000000001', 0, '10:00','in_service',2,'line'),
+  ('c8','ร้านข้าวมันไก่เจ๊หมวย','PHOTO','b0000000-0000-4000-8000-000000000001', 0, '11:00','checked_in',3,'staff'),
+  ('c7','PULSE Gym','ONEDAY','b0000000-0000-4000-8000-000000000002', 0, '09:30','in_service',4,'line'),
+  (null,'คุณนก (walk-in)','CONSULT','b0000000-0000-4000-8000-000000000002', 0, '13:30','checked_in',5,'walkin'),
+  ('c4','แอร์ดีเซอร์วิส','CONSULT','b0000000-0000-4000-8000-000000000001', 0, '14:00','confirmed',6,'line'),
+  ('c5','Moka House','ONEDAY','b0000000-0000-4000-8000-000000000002', 1, '09:00','confirmed',1,'line'),
+  ('c6','KidzLab','PHOTO','b0000000-0000-4000-8000-000000000001', 1, '13:00','confirmed',2,'staff')
+) x(c, n, s, r, d, t, status, q, src)
+join booking_services sv on sv.code = x.s
+cross join lateral (select (((now() at time zone 'Asia/Bangkok')::date + x.d) + x.t::time) at time zone 'Asia/Bangkok' st) z;

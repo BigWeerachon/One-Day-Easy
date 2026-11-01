@@ -5,7 +5,7 @@ import { canTransition, type Stage, type Actor } from "./workflow";
 import { type DocType, EXPIRY_DAYS } from "./money";
 import { ALL_EVENTS } from "./events";
 import { randomUUID } from "node:crypto";
-import { pushText, type LineError } from "./line";
+import { pushText, type LineError, type QuickItem } from "./line";
 
 export type ClientStatus = "lead" | "active" | "care";
 export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; taxId: string | null }
@@ -246,13 +246,13 @@ export async function reply(clientId: string, text: string) {
 const MAX_ATTEMPTS = 3;
 /** ทำงาน line.push 1 ครั้ง · ล้มเหลวครบ 3 ครั้ง → dead-letter (ให้คนกดลองใหม่) */
 export async function runLinePush(taskId: string) {
-  const t = await one<{ status: string; attempts: number; payload: { message_id: string; to: string; retry_key: string } }>(`select status, attempts, payload from tasks where id = $1`, [taskId]);
+  const t = await one<{ status: string; attempts: number; payload: { message_id: string; to: string; retry_key: string; quick?: QuickItem[] } }>(`select status, attempts, payload from tasks where id = $1`, [taskId]);
   if (!t || !["queued", "failed"].includes(t.status)) return;
   const m = await one<{ body: string }>(`select body from messages where id = $1`, [t.payload.message_id]);
   if (!m) return;
   await q(`update tasks set status = 'running', attempts = attempts + 1 where id = $1`, [taskId]);
   try {
-    await pushText(t.payload.to, m.body, t.payload.retry_key);
+    await pushText(t.payload.to, m.body, t.payload.retry_key, t.payload.quick);
     await q(`update tasks set status = 'done', last_error = null where id = $1`, [taskId]);
     await q(`update messages set delivery = 'sent', delivery_error = null where id = $1`, [t.payload.message_id]);
   } catch (e) {
@@ -459,7 +459,7 @@ export async function processSlip(slipId: string): Promise<{ outcome: "approved"
 }
 
 /** ข้อความจากระบบถึงลูกค้า (เช่น แจ้งผลสลิป) · ไม่เปลี่ยนสถานะอ่านแล้วของแชท */
-export async function sendSystemMessage(clientId: string, text: string) {
+export async function sendSystemMessage(clientId: string, text: string, quick?: QuickItem[]) {
   const to = await lineUserIdOf(clientId);
   const taskId = await tx(async (c) => {
     const [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [clientId]);
@@ -467,7 +467,7 @@ export async function sendSystemMessage(clientId: string, text: string) {
     const [m] = await rows<{ id: string }>(c, `insert into messages (conversation_id, sender, body, read_at, delivery) values ($1,'system',$2,now(),$3) returning id::text`, [cv.id, text, to ? "pending" : "none"]);
     if (!to) return null;
     const [t] = await rows<{ id: string }>(c, `insert into tasks (name, idempotency_key, payload) values ('line.push · แจ้งลูกค้า', $1, $2) returning id::text`,
-      [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID() })]);
+      [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID(), quick })]);
     return t.id;
   });
   if (taskId) await runLinePush(taskId);
