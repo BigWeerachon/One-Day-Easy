@@ -1,0 +1,10 @@
+{
+  "name": "onedayeasy",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w apps/studio",
+    "build": "npm run build -w apps/studio",
+    "test": "npm test -w apps/studio"
+  }
+}
