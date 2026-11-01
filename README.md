@@ -13,11 +13,26 @@
 | สเปก · ตั้งค่า | `/spec`, `/settings` | Roadmap, block schema, event catalog · ทีม/การเชื่อมต่อ/SLA |
 
 กฎหลักอยู่ใน `apps/studio/lib/` — `workflow.ts` (state machine ห้ามข้ามขั้น), `blocks.ts` (schema 16 บล็อก + T1–T10), `events.ts` (catalog), `money.ts` (สตางค์ + เลขที่เอกสาร)
-ฐานข้อมูล Supabase: `supabase/migrations/0001_core.sql` (19 ตาราง, trigger บังคับการเปลี่ยนขั้น, append-only, RLS)
+ฐานข้อมูล Supabase: `supabase/migrations/0001_core.sql` (19 ตาราง, trigger บังคับการเปลี่ยนขั้น, append-only, RLS) · ข้อมูลตัวอย่าง `supabase/seed.sql`
 
-> ตอนนี้ใช้ in-memory store พร้อมข้อมูลตัวอย่าง (`lib/store.ts`) — ข้อมูลหายเมื่อรีสตาร์ต ขั้นต่อไปคือเปลี่ยนไปอ่าน/เขียน Supabase
+## เชื่อม Supabase
+
+1. Supabase → **Project Settings → Database → Connection string → URI** คัดลอกมา (Session pooler, port 5432)
+2. สร้างไฟล์ `apps/studio/.env.local` (ดูตัวอย่าง `.env.example`):
+   ```
+   DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+   ```
+3. สร้างตาราง + ข้อมูลตัวอย่าง แล้วเปิดใช้:
+   ```bash
+   npm install
+   npm run db:seed -w apps/studio     # migrations + seed (ข้าม seed ถ้ามีข้อมูลแล้ว)
+   npm run dev                        # http://localhost:3000
+   ```
+   - `db:setup` = migrations อย่างเดียว (ใช้กับ production) · `db:reset` = **ลบทุกตาราง** แล้วสร้างใหม่ + seed
+   - บน Vercel ตั้ง `DATABASE_URL` เป็น Transaction pooler (port 6543)
+
+แอปต่อ Postgres ตรงจากฝั่ง server (`lib/db.ts`, ไลบรารี `pg`) — รหัสผ่านไม่ถูกส่งไป browser. ทุกการเปลี่ยนเงิน/ขั้นงานอยู่ใน transaction เดียว และ trigger ในฐานข้อมูลตรวจการเปลี่ยนขั้นซ้ำอีกชั้น
 
 ```bash
-npm install && npm run dev   # http://localhost:3000
-npm test                     # unit tests กฎเงิน/ขั้นงาน/schema
+npm test     # unit tests กฎเงิน/ขั้นงาน/schema
 ```

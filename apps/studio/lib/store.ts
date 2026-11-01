@@ -1,159 +1,238 @@
+import "server-only";
+import type { PoolClient } from "pg";
+import { q, one, tx } from "./db";
 import { canTransition, type Stage, type Actor } from "./workflow";
-import { formatDocNo, type DocType, EXPIRY_DAYS } from "./money";
+import { type DocType, EXPIRY_DAYS } from "./money";
 import { ALL_EVENTS } from "./events";
 
-// In-memory store สำหรับ dev · แทนที่ด้วย Supabase (ดู supabase/migrations) ใน production
 export type ClientStatus = "lead" | "active" | "care";
-export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; notes: string[]; taxId?: string }
-export interface Job { id: string; clientId: string; title: string; stage: Stage; template?: string; checksPassed: number; checklistDone: boolean; pdpa: boolean; approved: boolean; editRounds: number; slaHours: number; assignee: string; pausedFrom?: Stage }
+export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; taxId: string | null }
+export interface Job { id: string; clientId: string; siteId: string | null; title: string; stage: Stage; pausedFrom: Stage | null; template: string | null; checksPassed: number; checklistDone: boolean; pdpa: boolean; approved: boolean; editRounds: number; slaHours: number | null; assignee: string }
 export interface Site { id: string; clientId: string; domain: string; template: string; status: "draft" | "live" | "down"; version: number; config: Record<string, unknown> }
-export interface SiteVersion { siteId: string; version: number; config: Record<string, unknown>; at: string; by: string; note: string }
-export interface Doc { no: string; type: DocType; clientId: string; jobId?: string; total: number; paid: number; status: "draft" | "issued" | "paid" | "voided" | "expired"; issuedAt: string; revision: number }
+export interface SiteVersion { siteId: string; version: number; at: string; by: string; note: string }
+export interface Doc { no: string; type: DocType; clientId: string; clientName: string; jobId: string | null; total: number; paid: number; status: "draft" | "issued" | "paid" | "voided" | "expired"; issuedAt: string; revision: number }
 export interface Slip { id: string; docNo: string; amount: number; status: "pending" | "verified" | "rejected"; at: string }
 export interface Message { id: string; clientId: string; from: "client" | "team" | "system"; text: string; at: string; read: boolean }
-export interface Task { id: string; name: string; jobId?: string; attempts: number; status: "queued" | "running" | "done" | "failed" | "dead"; error?: string; idemKey: string }
-export interface Ev { id: number; name: string; jobId?: string; actor: string; source: "human" | "system"; before?: unknown; after?: unknown; at: string }
+export interface Task { id: string; name: string; jobId: string | null; attempts: number; status: "queued" | "running" | "done" | "failed" | "dead"; error: string | null; idemKey: string }
+export interface Ev { id: string; name: string; jobId: string | null; actor: string; source: "human" | "system"; before: unknown; after: unknown; at: string }
 export interface CatalogItem { code: string; name: string; price: number; recurring: boolean }
 
-const now = () => new Date().toISOString();
+type Db = Pick<PoolClient, "query">;
+const rows = async <T>(c: Db, sql: string, p: unknown[] = []) => (await c.query(sql, p)).rows as T[];
 
-function seed() {
-  const clients: Client[] = [
-    { id: "c1", name: "ครัวป้าแดง", kind: "ร้านอาหาร", status: "active", pkg: "Start", channel: "LINE", contact: "คุณแดง", color: "#f59e0b", lastContactMin: 2, notes: ["ชอบโทนแดงอบอุ่น"] },
-    { id: "c2", name: "บ้านสวนริมดอย", kind: "ที่พัก", status: "active", pkg: "Pro", channel: "LINE", contact: "คุณต้น", color: "#16a34a", lastContactMin: 60, notes: ["ไม่ตอบ 72 ชม. — ต้องโทร"] },
-    { id: "c3", name: "Lumière Clinic", kind: "คลินิก", status: "active", pkg: "Business", channel: "Email", contact: "คุณแอน", color: "#7c3aed", lastContactMin: 15, notes: [] },
-    { id: "c4", name: "แอร์ดีเซอร์วิส", kind: "บริการ", status: "care", pkg: "Basic", channel: "LINE", contact: "ช่างต้น", color: "#0b6cf0", lastContactMin: 2880, notes: [] },
-    { id: "c5", name: "Moka House", kind: "คาเฟ่", status: "care", pkg: "Start", channel: "LINE", contact: "คุณมิ้น", color: "#7a4a2a", lastContactMin: 7200, notes: ["ชอบโทนเขียว"] },
-    { id: "c6", name: "KidzLab", kind: "โรงเรียน", status: "active", pkg: "Basic", channel: "Web", contact: "คุณนุ่น", color: "#f47aa5", lastContactMin: 180, notes: [] },
-    { id: "c7", name: "PULSE Gym", kind: "บริการ", status: "lead", pkg: "—", channel: "FB", contact: "คุณบีม", color: "#141a2b", lastContactMin: 1440, notes: [] },
-    { id: "c8", name: "ร้านข้าวมันไก่เจ๊หมวย", kind: "ร้านอาหาร", status: "active", pkg: "Start", channel: "LINE", contact: "เจ๊หมวย", color: "#e11d48", lastContactMin: 12, notes: [] },
-    { id: "c9", name: "ร้านนวดสบายดี", kind: "บริการ", status: "active", pkg: "Basic", channel: "LINE", contact: "คุณนก", color: "#0891b2", lastContactMin: 40, notes: [] },
-  ];
-  const J = (id: string, clientId: string, stage: Stage, extra: Partial<Job> = {}): Job => ({ id, clientId, title: clients.find((c) => c.id === clientId)!.name, stage, checksPassed: 0, checklistDone: false, pdpa: false, approved: false, editRounds: 0, slaHours: 8, assignee: "มิ้น", ...extra });
-  const jobs: Job[] = [
-    J("j1", "c8", "template", { template: "T3", checksPassed: 6, checklistDone: true, pdpa: true, slaHours: 2 }),
-    J("j2", "c9", "template", { checklistDone: true, pdpa: true, slaHours: 5, assignee: "ต้น" }),
-    J("j3", "c1", "client_review", { template: "T3", checksPassed: 6, checklistDone: true, pdpa: true, editRounds: 2, slaHours: 21 }),
-    J("j4", "c6", "intake", { assignee: "ต้น" }),
-    J("j5", "c2", "client_review", { template: "T4", checksPassed: 6, checklistDone: true, pdpa: true, slaHours: -48, title: "บ้านสวนริมดอย · เว็บที่ 3" }),
-    J("j6", "c3", "payment", { template: "T2", checksPassed: 6, checklistDone: true, pdpa: true, approved: true, slaHours: -1 }),
-    J("j7", "c5", "online", { template: "T1", checksPassed: 6, checklistDone: true, pdpa: true, approved: true }),
-    J("j8", "c4", "online", { template: "T5", checksPassed: 6, checklistDone: true, pdpa: true, approved: true }),
-    J("j9", "c7", "new_chat"),
-  ];
-  const sites: Site[] = [
-    { id: "s1", clientId: "c1", domain: "krua-padaeng.onedayeasy.app", template: "T3", status: "draft", version: 3, config: { hero: { title: "ครัวป้าแดง อร่อยแบบบ้านๆ", subtitle: "อาหารตามสั่งสูตรเด็ด ส่งไวในย่านลาดพร้าว", cta: "สั่งเลย" }, menu: { items: [{ name: "กะเพราหมูกรอบ", price: 60 }, { name: "ต้มยำกุ้ง", price: 120 }] }, line: { id: "@kruapadaeng" }, hours: { days: "จ.–ส.", open: "08:00", close: "20:00" }, map: { lat: 13.81, lng: 100.6, address: "ลาดพร้าว 71 กรุงเทพฯ" } } },
-    { id: "s2", clientId: "c5", domain: "mokahouse.com", template: "T1", status: "live", version: 7, config: { hero: { title: "Moka House", subtitle: "Specialty coffee & bakery", cta: "ดูเมนู" }, line: { id: "@mokahouse" } } },
-    { id: "s3", clientId: "c4", domain: "airdservice.com", template: "T5", status: "live", version: 4, config: { hero: { title: "แอร์ดีเซอร์วิส", subtitle: "ล้างแอร์ ซ่อมแอร์ มาไวใน 2 ชม.", cta: "จองช่าง" } } },
-    { id: "s4", clientId: "c8", domain: "yumyum.vercel.app", template: "T3", status: "down", version: 1, config: { hero: { title: "ข้าวมันไก่เจ๊หมวย", subtitle: "", cta: "สั่งเลย" } } },
-  ];
-  const docs: Doc[] = [
-    { no: "INV-2611-008", type: "INV", clientId: "c3", jobId: "j6", total: 745000, paid: 0, status: "issued", issuedAt: "2026-10-29", revision: 1 },
-    { no: "RN-2611-004", type: "RN", clientId: "c5", total: 299000, paid: 0, status: "issued", issuedAt: "2026-11-01", revision: 1 },
-    { no: "QT-2611-011", type: "QT", clientId: "c1", jobId: "j3", total: 359000, paid: 0, status: "issued", issuedAt: "2026-10-31", revision: 2 },
-    { no: "RC-2610-031", type: "RC", clientId: "c4", total: 459000, paid: 459000, status: "paid", issuedAt: "2026-10-20", revision: 1 },
-  ];
-  const slips: Slip[] = [{ id: "sl1", docNo: "INV-2611-008", amount: 700000, status: "pending", at: "2026-11-01T09:05:00Z" }];
-  const messages: Message[] = [
-    { id: "m1", clientId: "c1", from: "client", text: "ขอเปลี่ยนรูปหน้าแรกเป็นรูปร้านจริงได้ไหมคะ", at: "2026-11-01T09:58:00Z", read: false },
-    { id: "m2", clientId: "c3", from: "client", text: "โอนแล้วนะคะ แนบสลิปค่ะ", at: "2026-11-01T09:05:00Z", read: false },
-    { id: "m3", clientId: "c8", from: "client", text: "อยากได้เว็บร้านข้าวมันไก่ค่ะ ทำได้ในวันเดียวไหม", at: "2026-11-01T08:40:00Z", read: false },
-    { id: "m4", clientId: "c7", from: "client", text: "สนใจแพ็กเว็บยิมครับ ราคาเท่าไร", at: "2026-10-31T10:00:00Z", read: true },
-    { id: "m5", clientId: "c1", from: "team", text: "ได้เลยค่ะ ส่งรูปมาทาง LINE ได้เลย", at: "2026-11-01T10:00:00Z", read: true },
-  ];
-  const tasks: Task[] = [
-    { id: "t1", name: "line.push · แจ้งลิงก์เว็บ", jobId: "j8", attempts: 3, status: "dead", error: "LINE API 429 rate limit", idemKey: "j8:notify:v4" },
-    { id: "t2", name: "draft.generate · Sonnet", jobId: "j4", attempts: 1, status: "running", idemKey: "j4:draft:v1" },
-    { id: "t3", name: "document.send · RN-2611-004", attempts: 1, status: "done", idemKey: "RN-2611-004:send" },
-    { id: "t4", name: "site.healthcheck · daily", attempts: 1, status: "done", idemKey: "hc:2026-11-01" },
-  ];
-  const catalog: CatalogItem[] = [
-    { code: "PKG-START", name: "แพ็ก Start · เว็บ 1 หน้า", price: 159000, recurring: false },
-    { code: "PKG-BASIC", name: "แพ็ก Basic · หลายบล็อก + โดเมน", price: 299000, recurring: false },
-    { code: "PKG-PRO", name: "แพ็ก Pro · จองห้อง/บริการ", price: 599000, recurring: false },
-    { code: "PKG-BIZ", name: "แพ็ก Business", price: 899000, recurring: false },
-    { code: "CARE-Y", name: "ดูแลรายปี + โฮสติ้ง", price: 299000, recurring: true },
-    { code: "EDIT-X", name: "แก้เพิ่มเกินรอบ (ต่อครั้ง)", price: 45000, recurring: false },
-  ];
-  return { clients, jobs, sites, versions: [] as SiteVersion[], docs, slips, messages, tasks, events: [] as Ev[], catalog, seq: { INV: 8, QT: 11, RC: 31, RN: 4, CN: 0 } as Record<DocType, number> };
-}
+// ---------- reads ----------
+const CLIENT_COLS = `id, name, coalesce(kind,'อื่นๆ') kind, status, coalesce(package,'—') pkg, channel, coalesce(contact_name,'-') contact, color,
+  floor(extract(epoch from now() - coalesce(last_contact_at, created_at)) / 60)::int "lastContactMin", tax_id "taxId"`;
+export const listClients = (status = "", search = "") => q<Client>(
+  `select ${CLIENT_COLS} from clients where ($1 = '' or status = $1)
+   and ($2 = '' or (name || ' ' || coalesce(contact_name,'') || ' ' || coalesce(kind,'')) ilike '%' || $2 || '%')
+   order by last_contact_at desc nulls last`, [status, search]);
+export const countClients = async () => Object.fromEntries((await q<{ status: string; n: number }>(`select status, count(*)::int n from clients group by status`)).map((r) => [r.status, r.n])) as Record<string, number>;
+export const countMissingTax = async () => (await one<{ n: number }>(`select count(*)::int n from clients where tax_id is null and status <> 'lead'`))!.n;
+export const getClient = (id: string) => isUuid(id) ? one<Client>(`select ${CLIENT_COLS} from clients where id = $1`, [id]) : Promise.resolve(undefined);
+export const clientNotes = async (id: string) => (await q<{ note: string }>(`select note from client_notes where client_id = $1 order by created_at desc`, [id])).map((r) => r.note);
 
-const g = globalThis as unknown as { __ode?: ReturnType<typeof seed> };
-export const db = (g.__ode ??= seed());
+const JOB_COLS = `id, client_id "clientId", site_id "siteId", title, stage, paused_from "pausedFrom", template, checks_passed "checksPassed",
+  checklist_done "checklistDone", pdpa_consent pdpa, approved, edit_rounds "editRounds", coalesce(assignee,'-') assignee,
+  case when sla_due_at is null then null else round(extract(epoch from sla_due_at - now()) / 3600)::int end "slaHours"`;
+export const listJobs = (clientId?: string) => q<Job>(`select ${JOB_COLS} from jobs where ($1::uuid is null or client_id = $1) order by sla_due_at nulls last`, [clientId ?? null]);
+export const getJob = (id: string) => isUuid(id) ? one<Job>(`select ${JOB_COLS} from jobs where id = $1`, [id]) : Promise.resolve(undefined);
 
-let evId = 0;
-export function emit(name: string, e: Omit<Ev, "id" | "name" | "at">) {
+const SITE_COLS = `id, client_id "clientId", domain, template, status, version, config`;
+export const listSites = (clientId?: string) => q<Site>(`select ${SITE_COLS} from sites where ($1::uuid is null or client_id = $1) order by domain`, [clientId ?? null]);
+export const getSite = (id: string) => isUuid(id) ? one<Site>(`select ${SITE_COLS} from sites where id = $1`, [id]) : Promise.resolve(undefined);
+export const siteVersions = (siteId: string) => q<SiteVersion>(`select site_id "siteId", version, created_at::text at, coalesce(actor,'-') by, coalesce(note,'') note from site_versions where site_id = $1 order by version desc limit 20`, [siteId]);
+
+const DOC_COLS = `d.no, d.type, d.client_id "clientId", c.name "clientName", d.job_id "jobId", d.total_satang::int total, d.paid_satang::int paid, d.status, d.issued_at::text "issuedAt", d.revision`;
+export const listDocs = (clientId?: string) => q<Doc>(`select ${DOC_COLS} from documents d join clients c on c.id = d.client_id where ($1::uuid is null or d.client_id = $1) order by d.issued_at desc, d.no desc`, [clientId ?? null]);
+export const listSlips = (status = "pending") => q<Slip & { due: number; clientName: string }>(
+  `select s.id::text, s.doc_no "docNo", s.amount_satang::int amount, s.status, s.created_at::text at, (d.total_satang - d.paid_satang)::int due, c.name "clientName"
+   from slips s join documents d on d.no = s.doc_no join clients c on c.id = d.client_id where s.status = $1 order by s.created_at`, [status]);
+export const listCatalog = () => q<CatalogItem>(`select code, name, price_satang::int price, recurring from catalog_items where active order by price_satang`);
+
+export const listThreads = () => q<{ clientId: string; name: string; color: string; channel: string; last: string; unread: number }>(
+  `select c.id "clientId", c.name, c.color, cv.channel, m.body last, (select count(*)::int from messages x where x.conversation_id = cv.id and x.sender = 'client' and x.read_at is null) unread
+   from conversations cv join clients c on c.id = cv.client_id
+   join lateral (select body, created_at from messages where conversation_id = cv.id order by created_at desc limit 1) m on true
+   order by m.created_at desc`);
+export const listMessages = (clientId: string) => q<Message>(
+  `select m.id::text, cv.client_id "clientId", m.sender "from", m.body text, m.created_at::text at, m.read_at is not null read
+   from messages m join conversations cv on cv.id = m.conversation_id where cv.client_id = $1 order by m.created_at`, [clientId]);
+export const unreadCount = async () => (await one<{ n: number }>(`select count(*)::int n from messages where sender = 'client' and read_at is null`))!.n;
+
+export const listTasks = () => q<Task>(`select id::text, name, job_id "jobId", attempts, status, last_error error, idempotency_key "idemKey" from tasks order by case status when 'dead' then 0 when 'failed' then 1 when 'running' then 2 when 'queued' then 3 else 4 end, id desc limit 50`);
+export const listEvents = (jobIds?: string[], limit = 50) => q<Ev>(
+  `select id::text, name, job_id "jobId", actor, source, before, after, created_at::text at from events where ($1::uuid[] is null or job_id = any($1)) order by id desc limit $2`, [jobIds ?? null, limit]);
+export const avgEditRounds = async () => Number((await one<{ v: string }>(`select coalesce(avg(edit_rounds),0) v from jobs`))!.v);
+
+// ---------- writes ----------
+const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
+async function emit(c: Db, name: string, e: { jobId?: string | null; actor: string; source: "human" | "system"; before?: unknown; after?: unknown }) {
   if (!ALL_EVENTS.includes(name)) throw new Error(`event ไม่อยู่ใน catalog: ${name}`);
-  db.events.unshift({ id: ++evId, name, at: now(), ...e });
+  await c.query(`insert into events (name, job_id, actor, source, before, after) values ($1,$2,$3,$4,$5,$6)`,
+    [name, e.jobId ?? null, e.actor, e.source, JSON.stringify(e.before ?? null), JSON.stringify(e.after ?? null)]);
 }
 
-export const clientOf = (id: string) => db.clients.find((c) => c.id === id);
+export async function addClient(input: { name: string; kind: string; contact: string; channel: string }) {
+  return tx(async (c) => {
+    const [cl] = await rows<{ id: string }>(c, `insert into clients (name, kind, contact_name, channel) values ($1,$2,$3,$4) returning id`, [input.name, input.kind, input.contact, input.channel]);
+    await c.query(`insert into contacts (client_id, channel, value, name) values ($1,$2,$3,$3)`, [cl.id, input.channel, input.contact]);
+    await c.query(`insert into conversations (client_id, channel) values ($1,$2)`, [cl.id, input.channel]);
+    const [j] = await rows<{ id: string }>(c, `insert into jobs (client_id, title, assignee, sla_due_at) values ($1,$2,'มิ้น', now() + interval '8 hour') returning id`, [cl.id, input.name]);
+    await emit(c, "client.created", { actor: "human", source: "human" });
+    await emit(c, "job.created", { jobId: j.id, actor: "system", source: "system" });
+    return cl.id;
+  });
+}
+export const addNote = (clientId: string, note: string) => q(`insert into client_notes (client_id, note) values ($1,$2)`, [clientId, note]);
 
-export function moveJob(jobId: string, to: Stage, by: Actor, reason?: string) {
-  const j = db.jobs.find((x) => x.id === jobId);
+export async function setJobFlags(jobId: string, checklist: boolean, pdpa: boolean) {
+  await tx(async (c) => {
+    const [old] = await rows<{ pdpa_consent: boolean }>(c, `select pdpa_consent from jobs where id = $1 for update`, [jobId]);
+    await c.query(`update jobs set checklist_done = $2, pdpa_consent = $3 where id = $1`, [jobId, checklist, pdpa]);
+    if (pdpa && !old.pdpa_consent) await emit(c, "consent.given", { jobId, actor: "client", source: "system" });
+  });
+}
+
+async function moveJobTx(c: Db, jobId: string, to: Stage, by: Actor, reason?: string) {
+  const [j] = await rows<{ stage: Stage; paused_from: Stage | null; checklist_done: boolean; pdpa_consent: boolean; checks_passed: number; approved: boolean }>(c, `select * from jobs where id = $1 for update`, [jobId]);
   if (!j) throw new Error("ไม่พบงาน");
-  const due = db.docs.filter((d) => d.jobId === jobId && d.type === "INV");
-  const paidInFull = due.length > 0 && due.every((d) => d.paid >= d.total);
-  if (j.stage === "paused" && to === j.pausedFrom) {
-    // ย้อนกลับจากพักงาน
-  } else {
-    const r = canTransition(j.stage, to, by, { ...j, paidInFull, reason });
+  const [{ unpaid, n }] = await rows<{ unpaid: number; n: number }>(c, `select count(*) filter (where paid_satang < total_satang)::int unpaid, count(*)::int n from documents where job_id = $1 and type = 'INV' and status <> 'voided'`, [jobId]);
+  const resuming = j.stage === "paused" && to === j.paused_from;
+  if (!resuming) {
+    const r = canTransition(j.stage, to, by, { checklistDone: j.checklist_done, pdpa: j.pdpa_consent, checksPassed: j.checks_passed, approved: j.approved, paidInFull: n > 0 && unpaid === 0, reason });
     if (!r.ok) throw new Error(r.error);
   }
-  const before = j.stage;
-  if (to === "paused") j.pausedFrom = j.stage;
-  if (before === "client_review" && to === "template") j.editRounds++;
-  if (to === "invoice") j.approved = true;
-  j.stage = to;
-  emit(to === "template" && before === "client_review" ? "edit.requested" : to === "invoice" ? "site.approved" : to === "online" ? "site.published" : "template.selected", { jobId, actor: by, source: by === "human" ? "human" : "system", before, after: to });
+  // trigger ในฐานข้อมูลตรวจซ้ำอีกชั้น (enforce_job_transition)
+  await c.query(`update jobs set stage = $2::job_stage, approved = approved or $2::job_stage = 'invoice' where id = $1`, [jobId, to]);
+  const name = to === "paused" ? "job.paused" : resuming ? "job.resumed"
+    : j.stage === "client_review" && to === "template" ? "edit.requested"
+    : to === "client_review" ? "preview.sent" : to === "invoice" ? "site.approved" : to === "online" ? "site.published"
+    : to === "template" ? "info.extracted" : "job.created";
+  await emit(c, name, { jobId, actor: by, source: by === "human" ? "human" : "system", before: j.stage, after: reason ? { stage: to, reason } : to });
 }
+export const moveJob = (jobId: string, to: Stage, by: Actor, reason?: string) => tx((c) => moveJobTx(c, jobId, to, by, reason));
 
-export function issueDoc(type: DocType, clientId: string, total: number, jobId?: string) {
-  const d = new Date();
-  const no = formatDocNo(type, d.getFullYear(), d.getMonth() + 1, ++db.seq[type]);
-  db.docs.unshift({ no, type, clientId, jobId, total, paid: 0, status: "issued", issuedAt: d.toISOString().slice(0, 10), revision: 1 });
-  emit("document.issued", { jobId, actor: "human", source: "human", after: no });
+async function issueDocTx(c: Db, type: DocType, clientId: string, total: number, jobId?: string | null) {
+  const [{ no }] = await rows<{ no: string }>(c, `select next_doc_no($1::doc_type) no`, [type]);
+  // ใบเสร็จ (RC) ออกหลังรับเงินครบเท่านั้น → บันทึกเป็นชำระแล้ว
+  const receipt = type === "RC";
+  await c.query(`insert into documents (no, type, client_id, job_id, total_satang, paid_satang, status, expires_at) values ($1,$2::doc_type,$3,$4,$5,$6,$7, case when $2::doc_type = 'QT' then current_date + $8::int end)`,
+    [no, type, clientId, jobId ?? null, total, receipt ? total : 0, receipt ? "paid" : "issued", EXPIRY_DAYS]);
+  await c.query(`insert into document_revisions (doc_no, revision, snapshot, reason) values ($1, 1, $2, 'ออกครั้งแรก')`, [no, JSON.stringify({ type, clientId, total })]);
+  await c.query(`insert into document_events (doc_no, kind) values ($1, 'issued')`, [no]);
+  await emit(c, "document.issued", { jobId, actor: "human", source: "human", after: no });
   return no;
 }
-
-export function verifySlip(slipId: string, accept: boolean) {
-  const s = db.slips.find((x) => x.id === slipId);
-  if (!s || s.status !== "pending") throw new Error("สลิปนี้ตรวจไปแล้ว");
-  const doc = db.docs.find((d) => d.no === s.docNo)!;
-  s.status = accept ? "verified" : "rejected";
-  emit(accept ? "slip.verified" : "slip.rejected", { jobId: doc.jobId, actor: "human", source: "human", after: s.amount });
-  if (!accept) return;
-  doc.paid += s.amount;
-  emit("payment.recorded", { jobId: doc.jobId, actor: "human", source: "human", after: doc.paid });
-  if (doc.paid >= doc.total) {
-    doc.status = "paid";
-    issueDoc("RC", doc.clientId, doc.total, doc.jobId);
-    const j = doc.jobId && db.jobs.find((x) => x.id === doc.jobId);
-    if (j && j.stage === "payment") moveJob(j.id, "online", "system");
-  }
+export async function issueDoc(type: DocType, clientId: string, total: number, jobId?: string) {
+  return tx(async (c) => {
+    const no = await issueDocTx(c, type, clientId, total, jobId);
+    if (jobId && type === "INV") {
+      const [j] = await rows<{ stage: Stage }>(c, `select stage from jobs where id = $1`, [jobId]);
+      if (j?.stage === "invoice") await moveJobTx(c, jobId, "payment", "system");
+    }
+    return no;
+  });
 }
 
-export function expireDocs(today = new Date()) {
-  for (const d of db.docs) if (d.type === "QT" && d.status === "issued" && (today.getTime() - new Date(d.issuedAt).getTime()) / 864e5 > EXPIRY_DAYS) { d.status = "expired"; emit("document.expired", { actor: "system", source: "system", after: d.no }); }
+export async function addSlip(docNo: string, amount: number) {
+  await tx(async (c) => {
+    const [d] = await rows<{ job_id: string | null; status: string }>(c, `select job_id, status from documents where no = $1`, [docNo]);
+    if (!d) throw new Error("ไม่พบเลขที่เอกสาร");
+    if (d.status !== "issued") throw new Error(`เอกสาร ${docNo} สถานะ ${d.status} รับสลิปไม่ได้`);
+    await c.query(`insert into slips (doc_no, amount_satang) values ($1,$2)`, [docNo, amount]);
+    await emit(c, "slip.received", { jobId: d.job_id, actor: "client", source: "system", after: amount });
+  });
 }
 
-export function retryTask(id: string) {
-  const t = db.tasks.find((x) => x.id === id);
-  if (!t) throw new Error("ไม่พบงาน");
-  t.status = "queued"; t.attempts = 0; t.error = undefined;
+export async function verifySlip(slipId: string, accept: boolean, by = "Big") {
+  await tx(async (c) => {
+    const [s] = await rows<{ doc_no: string; amount_satang: string; status: string }>(c, `select * from slips where id = $1 for update`, [slipId]);
+    if (!s || s.status !== "pending") throw new Error("สลิปนี้ตรวจไปแล้ว");
+    const [d] = await rows<{ no: string; client_id: string; job_id: string | null; total_satang: string; paid_satang: string }>(c, `select * from documents where no = $1 for update`, [s.doc_no]);
+    const amount = Number(s.amount_satang);
+    await c.query(`update slips set status = $2, verified_by = $3 where id = $1`, [slipId, accept ? "verified" : "rejected", by]);
+    await emit(c, accept ? "slip.verified" : "slip.rejected", { jobId: d.job_id, actor: by, source: "human", after: amount });
+    if (!accept) return;
+    const paid = Number(d.paid_satang) + amount, total = Number(d.total_satang);
+    await c.query(`insert into payments (doc_no, amount_satang, method) values ($1,$2,'promptpay')`, [d.no, amount]);
+    await c.query(`update documents set paid_satang = $2, status = case when $2 >= total_satang then 'paid' else status end where no = $1`, [d.no, paid]);
+    await emit(c, "payment.recorded", { jobId: d.job_id, actor: by, source: "human", after: paid });
+    if (paid < total) return;
+    await c.query(`insert into document_events (doc_no, kind) values ($1, 'paid')`, [d.no]);
+    await issueDocTx(c, "RC", d.client_id, total, d.job_id);
+    if (d.job_id) {
+      const [j] = await rows<{ stage: Stage }>(c, `select stage from jobs where id = $1`, [d.job_id]);
+      if (j?.stage === "payment") await moveJobTx(c, d.job_id, "online", "system");
+    }
+  });
 }
 
-export function saveSiteVersion(siteId: string, config: Record<string, unknown>, by: string, note: string) {
-  const s = db.sites.find((x) => x.id === siteId)!;
-  db.versions.unshift({ siteId, version: s.version, config: s.config, at: now(), by, note: "ก่อน: " + note });
-  s.version++; s.config = config;
-  emit("site.version.saved", { actor: by, source: "human", after: s.version });
+export async function voidDoc(no: string) {
+  await tx(async (c) => {
+    const [d] = await rows<{ status: string; job_id: string | null }>(c, `select status, job_id from documents where no = $1 for update`, [no]);
+    if (!d || d.status !== "issued") throw new Error("ยกเลิกได้เฉพาะเอกสารที่ออกแล้วและยังไม่ชำระ · ชำระแล้วให้ออกใบลดหนี้");
+    await c.query(`update documents set status = 'voided' where no = $1`, [no]);
+    await c.query(`insert into document_events (doc_no, kind) values ($1, 'voided')`, [no]);
+    await emit(c, "document.voided", { jobId: d.job_id, actor: "human", source: "human", after: no });
+  });
 }
-export function rollbackSite(siteId: string) {
-  const v = db.versions.find((x) => x.siteId === siteId);
-  if (!v) throw new Error("ไม่มีเวอร์ชันก่อนหน้า");
-  const s = db.sites.find((x) => x.id === siteId)!;
-  db.versions.splice(db.versions.indexOf(v), 1);
-  s.config = v.config; s.version++;
-  emit("site.version.saved", { actor: "human", source: "human", after: s.version });
+
+export async function expireDocs() {
+  await tx(async (c) => {
+    const exp = await rows<{ no: string }>(c, `update documents set status = 'expired' where type = 'QT' and status = 'issued' and expires_at < current_date returning no`);
+    for (const d of exp) await emit(c, "document.expired", { actor: "system", source: "system", after: d.no });
+  });
+}
+
+export async function retryTask(id: string) {
+  const r = await q(`update tasks set status = 'queued', attempts = 0, last_error = null, run_after = now() where id = $1 and status in ('dead','failed') returning id`, [id]);
+  if (!r.length) throw new Error("ไม่พบงานที่ลองใหม่ได้");
+}
+
+export async function reply(clientId: string, text: string) {
+  await tx(async (c) => {
+    const [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [clientId]);
+    if (!cv) throw new Error("ไม่พบห้องแชท");
+    await c.query(`update messages set read_at = now() where conversation_id = $1 and read_at is null`, [cv.id]);
+    if (text) {
+      await c.query(`insert into messages (conversation_id, sender, body, read_at) values ($1,'team',$2,now())`, [cv.id, text]);
+      await c.query(`update clients set last_contact_at = now() where id = $1`, [clientId]);
+    }
+  });
+}
+
+export async function saveSiteConfig(siteId: string, config: Record<string, unknown>, by: string, note: string, checksPassed?: number) {
+  await tx(async (c) => {
+    const [s] = await rows<{ version: number; config: unknown }>(c, `select version, config from sites where id = $1 for update`, [siteId]);
+    if (!s) throw new Error("ไม่พบเว็บ");
+    await c.query(`insert into site_versions (site_id, version, config, actor, note) values ($1,$2,$3,$4,$5) on conflict do nothing`, [siteId, s.version, JSON.stringify(s.config), by, "ก่อน: " + note]);
+    await c.query(`update sites set version = version + 1, config = $2 where id = $1`, [siteId, JSON.stringify(config)]);
+    if (checksPassed !== undefined) await c.query(`update jobs set checks_passed = $2 where site_id = $1 and stage = 'template'`, [siteId, checksPassed]);
+    await emit(c, "site.version.saved", { actor: by, source: "human", before: s.version, after: s.version + 1 });
+  });
+}
+export async function rollbackSite(siteId: string, by = "Big") {
+  await tx(async (c) => {
+    const [s] = await rows<{ version: number; config: unknown }>(c, `select version, config from sites where id = $1 for update`, [siteId]);
+    const [v] = await rows<{ version: number; config: unknown }>(c, `select version, config from site_versions where site_id = $1 and version < $2 order by version desc limit 1`, [siteId, s.version]);
+    if (!v) throw new Error("ไม่มีเวอร์ชันก่อนหน้า");
+    await c.query(`insert into site_versions (site_id, version, config, actor, note) values ($1,$2,$3,$4,$5) on conflict do nothing`, [siteId, s.version, JSON.stringify(s.config), by, `ก่อนย้อนกลับไป v${v.version}`]);
+    await c.query(`update sites set version = version + 1, config = $2 where id = $1`, [siteId, JSON.stringify(v.config)]);
+    await emit(c, "site.version.saved", { actor: by, source: "human", before: s.version, after: `rollback→v${v.version}` });
+  });
+}
+
+export async function createSiteForJob(jobId: string, template: string) {
+  return tx(async (c) => {
+    const [j] = await rows<{ client_id: string; site_id: string | null; title: string }>(c, `select client_id, site_id, title from jobs where id = $1 for update`, [jobId]);
+    if (!j) throw new Error("ไม่พบงาน");
+    if (j.site_id) return j.site_id;
+    const slug = j.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "site";
+    const [s] = await rows<{ id: string }>(c, `insert into sites (client_id, domain, template) values ($1, $2 || '-' || substr(md5(random()::text), 1, 6) || '.onedayeasy.app', $3) returning id`, [j.client_id, slug, template]);
+    await c.query(`update jobs set site_id = $2, template = $3, checks_passed = 0 where id = $1`, [jobId, s.id, template]);
+    await emit(c, "template.selected", { jobId, actor: "human", source: "human", after: template });
+    return s.id;
+  });
 }

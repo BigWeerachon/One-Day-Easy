@@ -1,22 +1,38 @@
 import Link from "next/link";
-import { db, clientOf } from "@/lib/store";
-import { saveBlockAction, removeBlockAction, rollbackAction } from "@/lib/actions";
+import { listSites, getSite, getJob, listJobs, siteVersions, listClients } from "@/lib/store";
+import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction } from "@/lib/actions";
 import { TEMPLATES, BLOCKS, runChecks } from "@/lib/blocks";
 import { Header, Card, Err } from "@/components/ui";
 import JobActions from "@/components/JobActions";
 export default async function Builder({ searchParams }: { searchParams: Promise<{ site?: string; job?: string; block?: string; err?: string }> }) {
   const sp = await searchParams;
-  const job = sp.job ? db.jobs.find((j) => j.id === sp.job) : undefined;
-  const site = db.sites.find((s) => s.id === sp.site) ?? (job && db.sites.find((s) => s.clientId === job.clientId)) ?? db.sites[0];
+  const [sites, clients] = await Promise.all([listSites(), listClients()]);
+  const name = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const job = sp.job ? await getJob(sp.job) : undefined;
+
+  // งานที่ยังไม่มีเว็บ → เลือกเทมเพลตเพื่อสร้าง
+  if (job && !job.siteId) return (<>
+    <Header crumb={`สร้างเว็บ · ${name[job.clientId]}`} title="เลือกเทมเพลต" />
+    <div className="bd"><Err msg={sp.err} />
+      <Card title={`งาน: ${job.title}`} right={<span className="sm mut">สร้างเว็บใหม่จากเทมเพลต (บล็อก + theme)</span>}>
+        <div className="kpis">{TEMPLATES.map((t) => (
+          <form key={t.id} action={createSiteAction} className="card kpi"><input type="hidden" name="job" value={job.id} /><input type="hidden" name="template" value={t.id} />
+            <b>{t.id} · {t.name}</b><div className="sm mut" style={{ margin: "6px 0 10px" }}>{t.blocks.join(" · ")}</div><button className="btn o sm">ใช้เทมเพลตนี้</button></form>))}
+        </div>
+      </Card>
+    </div>
+  </>);
+
+  const site = (sp.site && await getSite(sp.site)) || (job?.siteId && await getSite(job.siteId)) || sites[0];
+  if (!site) return (<><Header crumb="สร้างเว็บ" title="ยังไม่มีเว็บ" /><div className="bd"><div className="note">เริ่มจากเพิ่มลูกค้าแล้วเลือกเทมเพลตในงานนั้น</div></div></>);
   const tpl = TEMPLATES.find((t) => t.id === site.template)!;
   const checks = runChecks(tpl, site.config); const passed = checks.filter((c) => c.ok).length;
-  const siteJob = job ?? db.jobs.find((j) => j.clientId === site.clientId && j.stage === "template");
-  if (siteJob && siteJob.template === site.template) siteJob.checksPassed = passed;
+  const siteJob = job ?? (await listJobs(site.clientId)).find((j) => j.siteId === site.id && !["online", "care"].includes(j.stage));
   const block = sp.block && tpl.blocks.includes(sp.block) ? sp.block : tpl.blocks[0];
-  const versions = db.versions.filter((v) => v.siteId === site.id);
+  const versions = await siteVersions(site.id);
   return (<>
-    <Header crumb={`สร้างเว็บ · ${clientOf(site.clientId)?.name}`} title={site.domain}>
-      {db.sites.map((s) => <Link key={s.id} className={"btn sm " + (s.id === site.id ? "" : "o")} href={`/builder?site=${s.id}`}>{clientOf(s.clientId)?.name}</Link>)}
+    <Header crumb={`สร้างเว็บ · ${name[site.clientId]}`} title={site.domain}>
+      {sites.map((s) => <Link key={s.id} className={"btn sm " + (s.id === site.id ? "" : "o")} href={`/builder?site=${s.id}`}>{name[s.clientId]}</Link>)}
     </Header>
     <div className="bd">
       <Err msg={sp.err} />
@@ -35,12 +51,11 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
           <Card title="config ทั้งหมด (sites.config)"><pre className="code">{JSON.stringify(site.config, null, 2)}</pre></Card>
         </div>
         <div className="side" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <Card title="ตรวจอัตโนมัติก่อนส่ง" right={<span className={"chip " + (passed === 6 ? "c-g" : "c-r")}>{passed}/6</span>}><div className="list">{checks.map((c) => <div key={c.name} className="sm">{c.ok ? "✅" : "❌"} {c.name}</div>)}</div></Card>
-          {siteJob && <Card title={`งาน · ${siteJob.title}`}><JobActions job={siteJob} back={`/builder?site=${site.id}`} /></Card>}
+          <Card title="ตรวจอัตโนมัติก่อนส่ง" right={<span className={"chip " + (passed === 6 ? "c-g" : "c-r")}>{passed}/6</span>}><div className="list">{checks.map((c) => <div key={c.name} className="sm">{c.ok ? "✅" : "❌"} {c.name}</div>)}</div><div className="sm mut" style={{ marginTop: 8 }}>ผลตรวจบันทึกลงงานทุกครั้งที่กดบันทึก</div></Card>
+          {siteJob && <Card title={`งาน · ${siteJob.title}`}><div className="sm mut" style={{ marginBottom: 8 }}>ตรวจผ่านที่บันทึกไว้ {siteJob.checksPassed}/6</div><JobActions job={siteJob} back={`/builder?site=${site.id}`} /></Card>}
           <Card title="เวอร์ชัน (site_versions)" right={versions.length > 0 && <form action={rollbackAction}><input type="hidden" name="site" value={site.id} /><button className="btn o sm">ย้อนกลับ 1 เวอร์ชัน</button></form>}>
-            <div className="list">{versions.map((v, i) => <div key={i} className="sm">v{v.version} · {v.note} · {v.by}</div>)}{!versions.length && <span className="sm mut">ยังไม่มีประวัติในรอบนี้</span>}</div>
+            <div className="list">{versions.map((v) => <div key={v.version} className="sm">v{v.version} · {v.note} · {v.by} · {new Date(v.at).toLocaleString("th-TH")}</div>)}{!versions.length && <span className="sm mut">ยังไม่มีประวัติ</span>}</div>
           </Card>
-          <Card title="เทมเพลต T1–T10"><div className="list">{TEMPLATES.map((t) => <div key={t.id} className="sm"><b>{t.id}</b> {t.name} <span className="mut">· {t.blocks.length} บล็อก</span></div>)}</div></Card>
         </div>
       </div>
     </div>
