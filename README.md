@@ -33,6 +33,21 @@
 
 แอปต่อ Postgres ตรงจากฝั่ง server (`lib/db.ts`, ไลบรารี `pg`) — รหัสผ่านไม่ถูกส่งไป browser. ทุกการเปลี่ยนเงิน/ขั้นงานอยู่ใน transaction เดียว และ trigger ในฐานข้อมูลตรวจการเปลี่ยนขั้นซ้ำอีกชั้น
 
+## Site Engine (`apps/engine`)
+
+แอปเดียวแสดงเว็บลูกค้าทุกเว็บ แยกตามโดเมน (A1) · อ่าน `sites.config` จากฐานข้อมูลเดียวกับ Studio แล้ววาดด้วยบล็อกกลาง + ธีมของเทมเพลต (T1–T10) จาก `packages/blocks`
+
+- **เว็บจริง**: `Host` → `sites.domain` · แสดงเฉพาะเว็บที่ขึ้นออนไลน์แล้ว (งานถึงขั้น "ออนไลน์" → `sites.status = live` อัตโนมัติ) · รองรับ `www.` · แคช 30 วินาทีต่อโดเมน
+- **ตัวอย่างร่าง**: `/preview/<siteId>?exp=…&sig=…` ลงลายเซ็น HMAC ด้วย `PREVIEW_SECRET` · ปุ่ม "ดูตัวอย่างเว็บ" ในหน้าสร้างเว็บ และ Portal แสดงเว็บจริงในกรอบให้ลูกค้าตรวจ · ไม่ถูก index
+- **รูป**: ใช้ในบล็อกด้วย `file:<id>` (รูปที่ลูกค้าส่งผ่าน Portal) หรือ URL `https:` เท่านั้น · ไฟล์ส่งให้เฉพาะเว็บของเจ้าของ
+- LINE (ปุ่ม + QR), QR พร้อมเพย์, แผนที่, เวลาเปิด, PDPA อยู่ในส่วนติดต่อ/ท้ายเว็บ
+
+```bash
+npm run dev:engine     # http://localhost:3001 (ตั้ง ENGINE_DEV_HOST เพื่อเลือกเว็บ)
+```
+
+Deploy เป็นอีกโปรเจกต์บน Vercel (Root Directory `apps/engine`) แล้วผูกโดเมนลูกค้าเข้าโปรเจกต์นี้ · ตั้ง `DATABASE_URL`, `PREVIEW_SECRET` (และ `ENGINE_URL`, `PREVIEW_SECRET` ฝั่ง Studio)
+
 ## ล็อกอินและสิทธิ์ทีม
 
 ทุกหน้า ทุก server action และ `/api/slips/*` ต้องล็อกอิน (ยกเว้น `/login`, LINE webhook และ cron ซึ่งมีลายเซ็น/โทเค็นของตัวเอง)

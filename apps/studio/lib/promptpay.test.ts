@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { crc16, promptPayPayload } from "./promptpay.ts";
+import { crc16, promptPayPayload } from "../../../packages/blocks/src/promptpay.ts";
 
 test("CRC-16/CCITT-FALSE check value", () => assert.equal(crc16("123456789"), "29B1"));
 test("เบอร์มือถือ + ยอด", () => {

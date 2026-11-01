@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canTransition } from "./workflow.ts";
-import { validateBlock, runChecks, TEMPLATES } from "./blocks.ts";
+import { validateBlock, runChecks, TEMPLATES } from "../../../packages/blocks/src/blocks.ts";
 import { ALL_EVENTS } from "./events.ts";
 import { formatDocNo, slipMatches } from "./money.ts";
 

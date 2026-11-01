@@ -3,6 +3,7 @@ import * as P from "@/lib/portal";
 import { approveAction, requestEditAction, paidEditAction, slipAction, newLinkAction } from "@/lib/portal-actions";
 import { promptPayPayload } from "@/lib/promptpay";
 import { baht } from "@/lib/money";
+import { previewUrl } from "@/lib/preview";
 import ImageInput from "@/components/ImageInput";
 import IntakeForm from "@/components/IntakeForm";
 import SubmitButton from "@/components/SubmitButton";
@@ -63,6 +64,7 @@ export default async function Portal({ params, searchParams }: { params: Promise
   if (job.stage === "client_review") {
     const hero = (site?.config.hero ?? {}) as { title?: string; subtitle?: string; cta?: string };
     const free = Math.max(0, P.FREE_EDITS - job.editRounds);
+    const pv = site ? previewUrl((await P.siteIdOf(ctx))!, 2 * 86400) : null;
     if (sp.extra != null) {
       const price = await P.extraEditPrice();
       return page(2, `ขั้นที่ 2/4 · ขอแก้รอบที่ ${job.editRounds + 1}`, "รอบแก้ฟรีครบแล้ว", (<>
@@ -73,11 +75,14 @@ export default async function Portal({ params, searchParams }: { params: Promise
       </>), `คุณใช้รอบแก้ฟรีครบ ${P.FREE_EDITS} รอบแล้ว รอบนี้มีค่าบริการ`);
     }
     return page(2, "ขั้นที่ 2/4 · ตรวจเว็บ", `ตัวอย่างเว็บของคุณ (v${site?.version ?? 1})`, (<>
-      <div className="pt-card" style={{ padding: 0, overflow: "hidden" }}>
+      {pv ? (<div className="pt-card" style={{ padding: 0, overflow: "hidden" }}>
+          <iframe src={pv} title="ตัวอย่างเว็บของคุณ" style={{ width: "100%", height: 520, border: 0, display: "block" }} loading="lazy" referrerPolicy="no-referrer" />
+          <a className="pt-sm" style={{ display: "block", padding: "12px 16px" }} href={pv} target="_blank" rel="noopener noreferrer">เปิดดูเต็มจอ ↗</a></div>)
+        : <div className="pt-card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ background: "#c8102e", color: "#fff", padding: "22px 16px" }}>{c.openingHours && <div className="pt-sm" style={{ opacity: .85 }}>เปิด {c.openingHours}</div>}
           <div style={{ fontSize: 21, fontWeight: 700, margin: "6px 0 4px" }}>{hero.title ?? c.name}</div>{hero.subtitle && <div className="pt-sm" style={{ opacity: .9, marginBottom: 10 }}>{hero.subtitle}</div>}
           {hero.cta && <span className="pt-chip" style={{ background: "#fcc419", color: "#141a2b" }}>{hero.cta}</span>}</div>
-        {site && <div className="pt-sm pt-mut" style={{ padding: "12px 16px" }}>{site.domain}</div>}</div>
+        {site && <div className="pt-sm pt-mut" style={{ padding: "12px 16px" }}>{site.domain}</div>}</div>}
       <div className="pt-card"><div className="pt-row" style={{ paddingTop: 0 }}><span>รอบแก้ฟรีคงเหลือ</span><b>{free} / {P.FREE_EDITS}</b></div><p className="pt-sm pt-mut" style={{ marginTop: 8 }}>รอบที่ {P.FREE_EDITS + 1} ขึ้นไปมีค่าบริการ</p></div>
       <form action={approveAction}><T t={token} /><SubmitButton className="pt-btn g" pending="กำลังอนุมัติ…">อนุมัติเว็บนี้</SubmitButton></form>
       <form action={requestEditAction} className="pt-card"><T t={token} /><label className="pt-lbl" style={{ marginTop: 0 }} htmlFor="e">หรือบอกสิ่งที่อยากแก้</label>

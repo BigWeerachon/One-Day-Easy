@@ -157,3 +157,5 @@ export async function uploadSlip(ctx: PortalCtx, file: { mime: "image/jpeg" | "i
 
 // ---------- ขั้นที่ 4: เสร็จ ----------
 export const latestReceipt = (ctx: PortalCtx) => one<{ no: string; total: number }>(`select no, total_satang::int total from documents where client_id = $1 and type = 'RC' and (job_id = $2 or job_id is null) order by issued_at desc, no desc limit 1`, [ctx.clientId, ctx.jobId]);
+
+export const siteIdOf = async (ctx: PortalCtx) => (await one<{ id: string }>(`select site_id id from jobs where id = $1`, [ctx.jobId]))?.id ?? null;
