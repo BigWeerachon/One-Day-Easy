@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { listJobs, listSlips, listTasks, listSites, listDocs, listClients, avgEditRounds } from "@/lib/store";
+import { listJobs, listSlips, listTasks, listSites, listDocs, listClients, avgEditRounds, avgTokensPerSite } from "@/lib/store";
 import { STAGE_LABEL, type Stage } from "@/lib/workflow";
 import { baht } from "@/lib/money";
 import { Header, Card, Kpi } from "@/components/ui";
 
 export default async function Today({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const tab = (await searchParams).tab === "board" ? 1 : 0;
-  const [jobs, slips, tasks, sites, docs, clients, rounds] = await Promise.all([listJobs(), listSlips(), listTasks(), listSites(), listDocs(), listClients(), avgEditRounds()]);
+  const [jobs, slips, tasks, sites, docs, clients, rounds, tokens] = await Promise.all([listJobs(), listSlips(), listTasks(), listSites(), listDocs(), listClients(), avgEditRounds(), avgTokensPerSite()]);
   const pkg = Object.fromEntries(clients.map((c) => [c.id, c.pkg]));
   const sla = (h: number | null) => h ?? 999;
   const queue = [
@@ -23,6 +23,7 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
     <div className="bd">
       <div className="kpis">
         <Kpi label="งานที่กำลังทำ" value={jobs.filter((j) => !["online", "care"].includes(j.stage)).length} sub={`ออนไลน์แล้ว ${live} เว็บ`} />
+        <Kpi label="Token ต่อเว็บ (Claude)" value={tokens ? `${(tokens / 1000).toFixed(1)}k` : "—"} sub="เพดาน 40k" tone={tokens > 40000 ? "#c62828" : undefined} />
         <Kpi label="รอบแก้ต่อเว็บ" value={rounds.toFixed(1)} sub="เป้า ≤ 2" />
         <Kpi label="สลิปรอตรวจ" value={slips.length} />
         <Kpi label="รายได้ต่อเว็บ" value={baht(live ? revenue / live : 0)} sub="จากใบเสร็จ ÷ เว็บออนไลน์" />

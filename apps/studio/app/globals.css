@@ -45,3 +45,4 @@ td{padding:12px 20px;border-bottom:1px solid #eef0f4;vertical-align:middle}
 .code{background:#0f1424;color:#d6e2ff;border-radius:10px;padding:14px;overflow:auto;font-size:12.5px;margin:0}
 .f{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .bubble{display:block;width:fit-content;max-width:72%;padding:8px 12px;border-radius:12px;background:#f1f3f7}.bubble.me{background:#0b6cf0;color:#fff;margin-left:auto}
+.btn:disabled{opacity:.45;cursor:not-allowed}

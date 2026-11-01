@@ -305,3 +305,73 @@ export async function createSiteForJob(jobId: string, template: string) {
     return s.id;
   });
 }
+
+// ---------- AI (Claude) ----------
+import type { Intake, AiUsage } from "./ai";
+export interface ProposalOp { block: string; data: unknown; error: string | null }
+export interface Proposal { id: string; siteId: string; baseVersion: number; instruction: string; summary: string | null; ops: ProposalOp[]; status: string; model: string | null; tokens: number; cacheRead: number; at: string }
+
+export async function getIntake(clientId: string) {
+  return one<{ intake: Intake | null; at: string | null }>(`select intake, intake_at::text at from clients where id = $1`, [clientId]);
+}
+
+/** บันทึกผลสรุปจากแชท · เติมเฉพาะช่องที่ยังว่าง · event ไม่เก็บข้อมูลส่วนบุคคล (T2) */
+export async function saveIntake(clientId: string, intake: Intake, usage: AiUsage) {
+  await tx(async (c) => {
+    await c.query(`update clients set intake = $2, intake_at = now(),
+      kind = coalesce(nullif(kind,'อื่นๆ'), $3, kind),
+      contact_name = case when contact_name is null or contact_name in ('-','') then coalesce($4, contact_name) else contact_name end
+      where id = $1`, [clientId, JSON.stringify(intake), intake.business_type, intake.contact_name]);
+    for (const n of intake.style_notes) {
+      await c.query(`insert into client_notes (client_id, note) select $1, $2 where not exists (select 1 from client_notes where client_id = $1 and note = $2)`, [clientId, n]);
+    }
+    const [job] = await rows<{ id: string }>(c, `select id from jobs where client_id = $1 order by created_at desc limit 1`, [clientId]);
+    await emit(c, intake.missing.length ? "info.missing.asked" : "info.extracted", {
+      jobId: job?.id, actor: "claude", source: "system",
+      after: { model: usage.model, tokens: usage.input + usage.output, missing: intake.missing.length },
+    });
+  });
+}
+
+const PROP_COLS = `id::text, site_id "siteId", base_version "baseVersion", instruction, summary, ops, status, model,
+  coalesce(input_tokens,0) + coalesce(output_tokens,0) tokens, coalesce(cache_read_tokens,0) "cacheRead", created_at::text at`;
+export const listProposals = (siteId: string) => q<Proposal>(`select ${PROP_COLS} from patch_proposals where site_id = $1 order by id desc limit 10`, [siteId]);
+
+export async function saveProposal(siteId: string, baseVersion: number, instruction: string, summary: string, ops: ProposalOp[], usage: AiUsage) {
+  return tx(async (c) => {
+    const [p] = await rows<{ id: string }>(c, `insert into patch_proposals (site_id, base_version, instruction, summary, ops, errors, model, input_tokens, output_tokens, cache_read_tokens)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id::text`,
+      [siteId, baseVersion, instruction, summary, JSON.stringify(ops), JSON.stringify(ops.filter((o) => o.error)), usage.model, usage.input, usage.output, usage.cacheRead]);
+    const [job] = await rows<{ id: string }>(c, `select id from jobs where site_id = $1 order by created_at desc limit 1`, [siteId]);
+    await emit(c, "patch.proposed", { jobId: job?.id, actor: "claude", source: "system", after: { proposal: p.id, model: usage.model, tokens: usage.input + usage.output, ops: ops.length } });
+    return p.id;
+  });
+}
+
+/** คนกดใช้ข้อเสนอ · ปฏิเสธถ้าเว็บถูกแก้หลังจาก AI เสนอ หรือมี op ไม่ผ่าน schema */
+export async function applyProposal(id: string, checksFor: (config: Record<string, unknown>, template: string) => number, by = "Big") {
+  await tx(async (c) => {
+    const [p] = await rows<{ site_id: string; base_version: number; ops: ProposalOp[]; status: string }>(c, `select * from patch_proposals where id = $1 for update`, [id]);
+    if (!p || p.status !== "proposed") throw new Error("ข้อเสนอนี้ถูกใช้หรือยกเลิกไปแล้ว");
+    const [s] = await rows<{ version: number; config: Record<string, unknown>; template: string }>(c, `select version, config, template from sites where id = $1 for update`, [p.site_id]);
+    if (s.version !== p.base_version) {
+      await c.query(`update patch_proposals set status = 'stale' where id = $1`, [id]);
+      throw new Error(`เว็บถูกแก้ไปแล้ว (v${p.base_version} → v${s.version}) · ขอให้ Claude เสนอใหม่`);
+    }
+    const bad = p.ops.filter((o) => o.error);
+    if (bad.length) throw new Error(`มี ${bad.length} บล็อกไม่ผ่าน schema: ${bad.map((o) => o.block).join(", ")}`);
+    const config = { ...s.config, ...Object.fromEntries(p.ops.map((o) => [o.block, o.data])) };
+    await c.query(`insert into site_versions (site_id, version, config, actor, note) values ($1,$2,$3,$4,$5) on conflict do nothing`, [p.site_id, s.version, JSON.stringify(s.config), by, `ก่อน: ใช้ข้อเสนอ AI #${id}`]);
+    await c.query(`update sites set version = version + 1, config = $2 where id = $1`, [p.site_id, JSON.stringify(config)]);
+    await c.query(`update jobs set checks_passed = $2 where site_id = $1 and stage = 'template'`, [p.site_id, checksFor(config, s.template)]);
+    await c.query(`update patch_proposals set status = 'applied' where id = $1`, [id]);
+    await emit(c, "patch.applied", { actor: by, source: "human", after: { proposal: id, blocks: p.ops.map((o) => o.block) } });
+    await emit(c, "site.version.saved", { actor: by, source: "human", before: s.version, after: s.version + 1 });
+  });
+}
+export async function rejectProposal(id: string) {
+  const r = await q(`update patch_proposals set status = 'rejected' where id = $1 and status = 'proposed' returning id`, [id]);
+  if (!r.length) throw new Error("ข้อเสนอนี้ถูกใช้หรือยกเลิกไปแล้ว");
+}
+/** KPI: token เฉลี่ยต่อเว็บ (จากข้อเสนอที่ AI สร้าง) */
+export const avgTokensPerSite = async () => Number((await one<{ v: string | null }>(`select avg(t) v from (select sum(coalesce(input_tokens,0) + coalesce(output_tokens,0)) t from patch_proposals group by site_id) x`))?.v ?? 0);
