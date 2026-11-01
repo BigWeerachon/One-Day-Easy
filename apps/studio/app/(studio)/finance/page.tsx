@@ -47,7 +47,7 @@ export default async function Finance({ searchParams }: { searchParams: Promise<
       <div className="row">
         <Card className="main" title="เอกสารทั้งหมด" right={<span className="sm mut">append-only · ยกเลิกแทนการลบ</span>} pad={false}><div className="tw"><table><thead><tr><th>เลขที่</th><th>ประเภท</th><th>ลูกค้า</th><th>ยอด</th><th>ชำระ</th><th>สถานะ</th><th /></tr></thead><tbody>
           {docs.map((d) => <tr key={d.no}><td className="mono">{d.no}{d.revision > 1 && <span className="sm mut"> r{d.revision}</span>}</td><td>{DOC_LABEL[d.type]}</td><td>{d.clientName}</td><td>{baht(d.total)}</td><td>{baht(d.paid)}</td><td><span className={"chip " + TONE[d.status]}>{d.status}</span></td>
-            <td>{d.status === "issued" && <form action={voidDocAction}><input type="hidden" name="doc" value={d.no} /><button className="btn r sm">ยกเลิก</button></form>}</td></tr>)}
+            <td style={{ whiteSpace: "nowrap" }}><a className="btn o sm" href={`/api/docs/${d.no}/pdf`} target="_blank" rel="noopener">PDF</a> {d.status === "issued" && <form action={voidDocAction} style={{ display: "inline" }}><input type="hidden" name="doc" value={d.no} /><button className="btn r sm">ยกเลิก</button></form>}</td></tr>)}
         </tbody></table></div></Card>
         <div className="side" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <Card title="ออกเอกสารใหม่"><form action={issueDocAction} className="list">

@@ -7,6 +7,7 @@ import { portalUrl } from "@/lib/portal";
 import { aiConfigured } from "@/lib/ai";
 import SubmitButton from "@/components/SubmitButton";
 import { STAGE_LABEL } from "@/lib/workflow";
+import { can } from "@/lib/permissions";
 import { baht, DOC_LABEL } from "@/lib/money";
 import { Header, Card, Err, Av } from "@/components/ui";
 import JobActions from "@/components/JobActions";
@@ -40,7 +41,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
             {!sites.length && <tr><td className="mut">ยังไม่มีเว็บ</td></tr>}
           </tbody></table></div></Card>
           <Card title="เอกสาร" pad={false}><div className="tw"><table><tbody>
-            {docs.map((d) => <tr key={d.no}><td className="mono">{d.no}</td><td>{DOC_LABEL[d.type]}</td><td>{baht(d.total)}</td><td>{d.status}</td></tr>)}
+            {docs.map((d) => <tr key={d.no}><td className="mono">{d.no}</td><td>{DOC_LABEL[d.type]}</td><td>{baht(d.total)}</td><td>{d.status}</td><td>{can(me.role, "finance.view") && <a className="btn o sm" href={`/api/docs/${d.no}/pdf`} target="_blank" rel="noopener">PDF</a>}</td></tr>)}
             {!docs.length && <tr><td className="mut">ยังไม่มีเอกสาร</td></tr>}
           </tbody></table></div></Card>
         </div>

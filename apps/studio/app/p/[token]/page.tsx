@@ -108,6 +108,7 @@ export default async function Portal({ params, searchParams }: { params: Promise
         <div className="pt-row"><span>ยอดตามใบแจ้งหนี้</span><span>{baht(cur.total)}</span></div>
         {cur.paid > 0 && <div className="pt-row"><span>ชำระแล้ว</span><span>{baht(cur.paid)}</span></div>}
         <div className="pt-row" style={{ border: 0, fontWeight: 700, fontSize: 17 }}><span>{cur.paid > 0 ? "คงเหลือ" : "ยอดชำระ"}</span><span>{baht(due)}</span></div>
+        <a className="pt-btn o" style={{ marginTop: 6 }} href={`/p/${token}/doc/${cur.no}`}>ดาวน์โหลด PDF</a>
       </div>
       <div className="pt-card" style={{ textAlign: "center" }}><div style={{ fontWeight: 600 }}>{cur.paid > 0 ? "สแกนจ่ายส่วนที่เหลือ" : "สแกนจ่ายด้วยพร้อมเพย์"}</div><Qr amount={due} /><div className="pt-sm pt-mut">ยอดตรง {baht(due)} · อ้างอิง {cur.no}</div></div>
       <form action={slipAction} className="pt-bd" style={{ padding: 0 }}><T t={token} />
@@ -125,6 +126,7 @@ export default async function Portal({ params, searchParams }: { params: Promise
       <div className="pt-card" style={{ textAlign: "center", padding: "28px 16px" }}><div className="pt-ok" style={{ fontSize: 40 }} aria-hidden="true">✓</div><h2 className="pt-h">ชำระเรียบร้อย · เว็บออนไลน์แล้ว</h2>{site && <p className="pt-sm pt-mut" style={{ marginTop: 6 }}>{site.domain}</p>}</div>
       <div className="pt-card">{rc && <div className="pt-row"><span>ใบเสร็จ</span><b>{rc.no}</b></div>}<div className="pt-row" style={{ border: 0 }}><span>สถานะเว็บ</span><b className="pt-ok">ออนไลน์</b></div></div>
       {site && <a className="pt-btn" href={`https://${site.domain}`} target="_blank" rel="noopener noreferrer">เปิดเว็บไซต์</a>}
+      {rc && <a className="pt-btn o" href={`/p/${token}/doc/${rc.no}`}>ดาวน์โหลดใบเสร็จ</a>}
     </>));
   }
 
