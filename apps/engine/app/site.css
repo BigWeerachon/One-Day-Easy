@@ -33,4 +33,4 @@
 .qr svg{width:160px;height:160px;background:#fff;border-radius:8px;padding:6px}
 .foot{padding:28px 0;border-top:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
 .site a{color:inherit}.site a.cta{color:#141a2b}
-.ribbon{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:9;background:#141a2b;color:#fff;border-radius:999px;padding:6px 16px;font:600 13px system-ui}
+.ribbon{position:fixed;top:66px;right:12px;z-index:9;background:rgba(20,26,43,.88);color:#fff;border-radius:999px;padding:4px 12px;font:600 12px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.18)}
