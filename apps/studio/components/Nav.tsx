@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logoutAction } from "@/lib/auth-actions";
+import { ROLE_LABEL, type Role } from "@/lib/permissions";
 const I = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
 const WORK = [
   ["/", "งานวันนี้", "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"],
@@ -14,7 +16,7 @@ const SYS = [
   ["/workflow", "Workflow อัตโนมัติ", "M7.5 6h9M6.5 8l4.5 8M17.5 8L13 16M5 3.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 0 1 0-5"],
   ["/spec", "สเปก & Roadmap", "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"],
 ];
-export default function Nav({ unread }: { unread: number }) {
+export default function Nav({ unread, allowed, me }: { unread: number; allowed: string[]; me: { name: string; role: Role } }) {
   const p = usePathname();
   const on = (h: string) => (h === "/" ? p === "/" : p.startsWith(h));
   const item = ([h, l, d]: string[]) => (
@@ -26,9 +28,10 @@ export default function Nav({ unread }: { unread: number }) {
     <nav className="sb" aria-label="เมนูหลัก">
       <div className="logo">One Day <span>Easy</span> · Studio</div>
       <div className="srch"><span>ค้นหาลูกค้า, เว็บ, แชท...</span><span className="kbd">⌘K</span></div>
-      <div className="grp">งาน</div>{WORK.map(item)}
-      <div className="grp">ระบบ</div>{SYS.map(item)}
-      <div className="me"><span className="av" style={{ background: "#4f46e5" }}>B</span><div><div style={{ fontWeight: 600 }}>Big</div><div className="sm mut">Owner</div></div></div>
+      <div className="grp">งาน</div>{WORK.filter(([h]) => allowed.includes(h)).map(item)}
+      <div className="grp">ระบบ</div>{SYS.filter(([h]) => allowed.includes(h)).map(item)}
+      <div className="me"><span className="av" style={{ background: "#4f46e5" }}>{me.name.slice(0, 1)}</span><div style={{ flex: 1, minWidth: 0 }}><Link href="/account" style={{ fontWeight: 600, textDecoration: "none" }}>{me.name}</Link><div className="sm mut">{ROLE_LABEL[me.role]}</div></div>
+        <form action={logoutAction}><button className="btn o sm" title="ออกจากระบบ">ออก</button></form></div>
     </nav>
   );
 }

@@ -33,6 +33,27 @@
 
 แอปต่อ Postgres ตรงจากฝั่ง server (`lib/db.ts`, ไลบรารี `pg`) — รหัสผ่านไม่ถูกส่งไป browser. ทุกการเปลี่ยนเงิน/ขั้นงานอยู่ใน transaction เดียว และ trigger ในฐานข้อมูลตรวจการเปลี่ยนขั้นซ้ำอีกชั้น
 
+## ล็อกอินและสิทธิ์ทีม
+
+ทุกหน้า ทุก server action และ `/api/slips/*` ต้องล็อกอิน (ยกเว้น `/login`, LINE webhook และ cron ซึ่งมีลายเซ็น/โทเค็นของตัวเอง)
+
+1. รัน `npm run db:setup -w apps/studio` (migration `0005_auth.sql`)
+2. สร้าง Owner คนแรก (ระบบจะถามรหัสผ่าน):
+   ```bash
+   npm run user:create -w apps/studio -- you@example.com "ชื่อ" owner
+   ```
+3. Owner เพิ่มสมาชิกอื่นได้ที่ **ตั้งค่า & ระบบ** · สมาชิกใหม่ต้องตั้งรหัสผ่านเองตอนเข้าครั้งแรก
+
+| บทบาท | ทำอะไรได้ |
+|---|---|
+| Owner | ทุกอย่าง รวมถึงจัดการทีม |
+| Builder | ลูกค้า แชท เปลี่ยนขั้นงาน สร้าง/แก้เว็บ ใช้ Claude · **ไม่เห็นการเงิน** |
+| Accountant | การเงิน: ออกเอกสาร ตรวจ/ยืนยันสลิป · ไม่เห็นลูกค้า/แชท/เว็บ |
+
+- รหัสผ่าน scrypt · session เก็บเฉพาะ hash · คุกกี้ httpOnly + SameSite=Lax (+ Secure บน production) · หมดอายุ 14 วัน
+- ผิด 5 ครั้ง → ล็อกอีเมลนั้น 15 นาที · เปลี่ยนบทบาท/ปิดบัญชี/รีเซ็ตรหัส → ตัด session ทันที · ต้องมี Owner อย่างน้อย 1 คนเสมอ
+- ลืมรหัสผ่าน: Owner รีเซ็ตให้ในหน้าตั้งค่า หรือรัน `user:create` ด้วยอีเมลเดิม
+
 ## เชื่อม LINE OA (Messaging API)
 
 1. LINE Developers → channel ของ OA → คัดลอก **Channel secret** (Basic settings) และออก **Channel access token (long-lived)** (Messaging API)

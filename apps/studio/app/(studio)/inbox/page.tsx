@@ -1,8 +1,10 @@
+import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { listThreads, listMessages, getClient } from "@/lib/store";
 import { replyAction } from "@/lib/actions";
 import { Header, Card, Av, Err } from "@/components/ui";
 export default async function Inbox({ searchParams }: { searchParams: Promise<{ c?: string; err?: string }> }) {
+  const me = await requirePage("clients.view");
   const { c, err } = await searchParams;
   const threads = await listThreads();
   const cur = c ?? threads[0]?.clientId;

@@ -1,3 +1,4 @@
+import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { listJobs, listSlips, listTasks, listSites, listDocs, listClients, avgEditRounds, avgTokensPerSite } from "@/lib/store";
 import { STAGE_LABEL, type Stage } from "@/lib/workflow";
@@ -5,6 +6,7 @@ import { baht } from "@/lib/money";
 import { Header, Card, Kpi } from "@/components/ui";
 
 export default async function Today({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const me = await requirePage("work.view");
   const tab = (await searchParams).tab === "board" ? 1 : 0;
   const [jobs, slips, tasks, sites, docs, clients, rounds, tokens] = await Promise.all([listJobs(), listSlips(), listTasks(), listSites(), listDocs(), listClients(), avgEditRounds(), avgTokensPerSite()]);
   const pkg = Object.fromEntries(clients.map((c) => [c.id, c.pkg]));

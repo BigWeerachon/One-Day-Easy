@@ -1,8 +1,10 @@
+import { requirePage } from "@/lib/auth";
 import { BLOCKS } from "@/lib/blocks";
 import { EVENT_CATALOG, ALL_EVENTS } from "@/lib/events";
 import { Header, Card } from "@/components/ui";
 const ROAD = [["O1 · แกนกลาง", "Site Engine + T3 + clients/sites/site_versions/events + แก้ config ในหลังบ้าน", "กำลังทำ"], ["O2 · ลูกค้าคนแรก", "LINE webhook + Portal + ใบแจ้งหนี้ + QR + คนยืนยันสลิป", "รอ O1"], ["O3 · อัตโนมัติ", "state machine + คิว + SLA + ตรวจสลิปอัตโนมัติ + publish อัตโนมัติ", "รอ O2"], ["O4 · ขยาย", "เทมเพลต T1–T10 + ต่ออายุ + บัญชี + ต้นทุน + canary", "รอ O3"]];
-export default function Spec() {
+export default async function Spec() {
+  const me = await requirePage("work.view");
   return (<>
     <Header crumb="ระบบ" title="สเปก & Roadmap"><span className="chip c-g">อนุมัติรอบที่ 3 · 1 พ.ย. 2569</span></Header>
     <div className="bd">
