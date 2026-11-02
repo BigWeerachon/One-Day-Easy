@@ -10,6 +10,12 @@
     "build": "npm run build -w apps/studio",
     "test": "npm test -w apps/studio",
     "dev:engine": "npm run dev -w apps/engine",
-    "build:engine": "npm run build -w apps/engine"
+    "build:engine": "npm run build -w apps/engine",
+    "test:unit": "npm test -w apps/studio",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:all": "npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

@@ -64,7 +64,8 @@ export async function handleBookingText(clientId: string, userId: string, text: 
       await say(clientId, "ต้องการจองบริการไหนคะ 😊", services.map((s) => ({ label: s.name, data: `bk:svc:${s.code}` })));
       return true;
     }
-    const d = date ?? sess.date;
+    // ใช้วันที่คุยค้างไว้เฉพาะเมื่อลูกค้าบอกแค่เวลา (เช่น "บ่าย 3") · ถามวันว่างใหม่ = เริ่มจากวันนี้
+    const d = date ?? (time != null ? sess.date : undefined);
     await setSession(userId, { code: svc.code, date: d, moveId: sess.moveId });
     if (d) await offerDay(clientId, svc, d, time, intent === "book" && !sess.moveId, customerName, sess.moveId);
     else await offerDays(clientId, svc, today, sess.moveId);
@@ -91,6 +92,8 @@ export async function handleBookingPostback(clientId: string, userId: string, da
       case "slot": return await hold(clientId, svc(a), new Date(Number(b)), customerName), true;
       case "ok": {
         const bk = await mine(clientId, a);
+        if (bk.status === "confirmed") { await say(clientId, `คิวนี้ยืนยันไว้แล้วค่ะ\n${summary(bk)}\nคิวที่ ${bk.queueNo} · รหัส ${bk.code}`); return true; }
+        if (bk.status !== "held") throw new BookingError("หมดเวลายืนยันแล้ว กรุณาเลือกเวลาใหม่");
         const done = await setStatus(bk.id, "confirmed", BOT);
         await setSession(userId, {});
         await say(clientId, `จองคิวสำเร็จ ✅\n${summary(done)}\nคิวที่ ${done.queueNo} · รหัส ${done.code}\n\nพิมพ์ "คิวของฉัน" เพื่อดู หรือ "ยกเลิกคิว" ได้ตลอดค่ะ`);

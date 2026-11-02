@@ -155,6 +155,8 @@ export async function createBooking(n: NewBooking): Promise<Booking> {
       }
       resourceId = ok[0].resourceId;
     }
+    // แทรกคิว (force) โดยไม่เลือกคน → คนที่ทำบริการนี้ได้และไม่ได้กำลังให้บริการ
+    if (!resourceId && n.force) resourceId = (await rows<{ id: string }>(c, `select r::text as id from unnest($1::uuid[]) r order by exists (select 1 from bookings b where b.resource_id = r and b.status = 'in_service') limit 1`, [service.resourceIds]))[0]?.id ?? null;
     if (!resourceId) throw new BookingError("ต้องเลือกผู้ให้บริการ");
     const end = new Date(n.start.getTime() + service.durationMin * 60_000);
     const busyUntil = new Date(end.getTime() + service.bufferMin * 60_000);
