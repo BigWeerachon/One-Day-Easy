@@ -115,7 +115,7 @@ async function RunView({ day, today, edit, href, svc }: { day: string; today: st
             <input type="hidden" name="svc" value={svcCode} /><input type="hidden" name="back" value={back} />
             <label className="sm">เวลา ({B.thaiDay(day, true)})
               <select name="slot" required>{avail?.days[0].slots.map((s) => <option key={s.start.getTime()} value={s.start.getTime()}>{localTime(s.start)} น. · {resources.find((r) => r.id === s.resourceId)?.name}</option>)}</select>
-              {!avail?.days[0].slots.length && <span className="sm" style={{ color: "#c62828" }}>วันนี้ไม่มีเวลาว่างสำหรับบริการนี้</span>}</label>
+              {!avail?.days[0].slots.length && <span className="sm" style={{ color: "#c62828" }}>วันที่เลือกไม่มีเวลาว่างสำหรับบริการนี้</span>}</label>
             <label className="sm">ผู้ให้บริการ<select name="resource"><option value="">ให้ระบบเลือก (คนที่งานน้อยที่สุด)</option>{resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
             <label className="sm">ลูกค้าในระบบ<select name="client"><option value="">— ไม่ระบุ —</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
             <input name="name" className="inp" placeholder="หรือพิมพ์ชื่อลูกค้า" />

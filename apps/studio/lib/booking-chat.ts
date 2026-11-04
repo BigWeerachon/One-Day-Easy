@@ -107,7 +107,7 @@ export async function handleBookingPostback(clientId: string, userId: string, da
       case "xq": {
         const bk = await mine(clientId, a);
         const s = await getSettings();
-        if (!canSelfCancel(bk.status, bk.start, new Date(), s.cancelCutoffMin)) { await say(clientId, `ยกเลิกเองได้ถึง ${Math.round(s.cancelCutoffMin / 60)} ชั่วโมงก่อนเวลานัดค่ะ ทีมงานจะติดต่อกลับเพื่อช่วยดำเนินการ`); return true; }
+        if (!canSelfCancel(bk.status, bk.start, new Date(), s.cancelCutoffMin)) { await say(clientId, `ยกเลิกเองได้ถึง ${Math.round(s.cancelCutoffMin / 60)} ชั่วโมงก่อนเวลานัดค่ะ ทีมงานจะติดต่อกลับค่ะ`); return true; }
         await setStatus(bk.id, "cancelled", BOT, "ลูกค้ายกเลิกผ่าน LINE");
         await say(clientId, `ยกเลิกคิว ${bk.code} แล้วค่ะ\n${summary(bk)}`);
         return true;
