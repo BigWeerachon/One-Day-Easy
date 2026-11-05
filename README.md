@@ -2,6 +2,13 @@
 
 ระบบหลังบ้านตามดีไซน์ Page Studio (Studio-*.dc.html): Next.js App Router + Server Actions
 
+📘 **คู่มือการใช้งานทั้งหมด + การทดสอบอัตโนมัติ: [docs/USAGE.md](docs/USAGE.md)**
+
+```bash
+npm run test:unit                                          # unit tests (ไม่ต้องมีฐานข้อมูล)
+TEST_DATABASE_URL=postgresql://localhost/studio_e2e npm run test:e2e   # end-to-end (Postgres + Chromium + mocks)
+```
+
 | หน้า | path | ทำอะไรได้ |
 |---|---|---|
 | งานวันนี้ | `/` | KPI · แจ้งเตือนเว็บล่ม · คิวที่ต้องมีคนทำ (เรียงตาม SLA) · บอร์ดการ์ดงาน |
@@ -9,6 +16,7 @@
 | ลูกค้า | `/clients`, `/clients/[id]` | ค้นหา/กรอง · เพิ่มลูกค้า (สร้างงานอัตโนมัติ) · เปลี่ยนขั้นงาน · client_notes · ไทม์ไลน์ |
 | สร้างเว็บ | `/builder` | แก้ config ทีละบล็อกตาม block schema (N1) · ตรวจ 6 ข้อ · เวอร์ชัน + ย้อนกลับ |
 | การเงิน | `/finance` | ออกเอกสาร QT/INV/RN/CN (เลขที่ต่อเนื่อง) · ตรวจสลิป · ครบยอด → ออกใบเสร็จ + ขึ้นออนไลน์อัตโนมัติ |
+| คิว & ตารางงาน | `/queue` | รันคิวหน้างาน (เรียกคิว/มาถึง/เสร็จ/ไม่มา) · ตารางรายสัปดาห์ · จองให้ลูกค้า · walk-in · ตั้งบริการ/เวลาทำการ/วันหยุด · ลูกค้าจองเองผ่านแชท LINE |
 | Workflow | `/workflow` | คิวงาน/dead-letter/retry · ตารางเปลี่ยนขั้น (N4) · event log |
 | สเปก · ตั้งค่า | `/spec`, `/settings` | Roadmap, block schema, event catalog · ทีม/การเชื่อมต่อ/SLA |
 

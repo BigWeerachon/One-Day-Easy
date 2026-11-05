@@ -18,7 +18,12 @@ export class LineError extends Error {
 }
 
 /** ส่ง push message · retryKey = X-Line-Retry-Key (UUID) กันส่งซ้ำเมื่อ retry */
-export async function pushText(to: string, text: string, retryKey: string) {
+export interface QuickItem { label: string; data: string; display?: string }
+/** ปุ่มตอบด่วน (Quick reply) · LINE จำกัด 13 ปุ่ม · label ≤ 20 ตัวอักษร · data ≤ 300 */
+export const quickReply = (items: QuickItem[]) => ({
+  items: items.slice(0, 13).map((i) => ({ type: "action", action: { type: "postback", label: [...i.label].slice(0, 20).join(""), data: i.data.slice(0, 300), displayText: (i.display ?? i.label).slice(0, 300) } })),
+});
+export async function pushText(to: string, text: string, retryKey: string, quick?: QuickItem[]) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token) throw new LineError("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN", 0, false);
   let res: Response;
@@ -26,7 +31,7 @@ export async function pushText(to: string, text: string, retryKey: string) {
     res = await fetch(`${base()}/v2/bot/message/push`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Line-Retry-Key": retryKey },
-      body: JSON.stringify({ to, messages: [{ type: "text", text: text.slice(0, 5000) }] }),
+      body: JSON.stringify({ to, messages: [{ type: "text", text: text.slice(0, 5000), ...(quick?.length ? { quickReply: quickReply(quick) } : {}) }] }),
       signal: AbortSignal.timeout(10_000),
     });
   } catch (e) {
@@ -54,6 +59,7 @@ export interface LineEvent {
   type: string; webhookEventId?: string; timestamp: number;
   source?: { type: string; userId?: string };
   message?: { id: string; type: string; text?: string };
+  postback?: { data: string };
   deliveryContext?: { isRedelivery: boolean };
 }
 export function describeMessage(m: NonNullable<LineEvent["message"]>): string {

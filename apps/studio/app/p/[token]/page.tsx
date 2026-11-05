@@ -114,7 +114,7 @@ export default async function Portal({ params, searchParams }: { params: Promise
       <form action={slipAction} className="pt-bd" style={{ padding: 0 }}><T t={token} />
         <ImageInput name="slip" label={cur.paid > 0 ? "แนบสลิปส่วนที่เหลือ" : "แนบสลิป"} max={2000} limit={1} required />
         <SubmitButton className="pt-btn" pending="กำลังตรวจสลิป…">ส่งสลิป</SubmitButton>
-        <p className="pt-sm pt-mut" style={{ textAlign: "center" }}>ระบบตรวจสลิปอัตโนมัติ และส่งใบเสร็จให้ทาง LINE ทันที</p></form>
+        <p className="pt-sm pt-mut" style={{ textAlign: "center" }}>ระบบตรวจสลิปให้อัตโนมัติ ถ้ายอดตรงจะส่งใบเสร็จทาง LINE ทันที</p></form>
       {rest.length > 0 && <div className="pt-card pt-sm"><div className="pt-mut">ใบถัดไป (ชำระหลังใบนี้)</div>{rest.map((d) => <div key={d.no} className="pt-row"><span>{d.no}</span><span>{baht(d.total - d.paid)}</span></div>)}</div>}
     </>));
   }

@@ -8,6 +8,9 @@ export const PERMS = {
   "clients.view": "ดูลูกค้า · แชท",
   "clients.edit": "เพิ่มลูกค้า · ตอบแชท · เปลี่ยนขั้นงาน",
   "sites.edit": "สร้าง/แก้เว็บ · ใช้ Claude",
+  "queue.view": "ดูคิวและตารางงาน",
+  "queue.edit": "จองคิว · รันคิว · เลื่อน/ยกเลิกคิว",
+  "queue.setup": "ตั้งบริการ เวลาทำการ วันหยุด และการจองผ่าน LINE",
   "finance.view": "ดูการเงิน",
   "finance.edit": "ออกเอกสาร · ตรวจ/ยืนยันสลิป · ยกเลิกเอกสาร",
   "system.retry": "ลองงานอัตโนมัติใหม่",
@@ -18,8 +21,8 @@ export type Perm = keyof typeof PERMS;
 
 const GRANTS: Record<Role, Perm[]> = {
   owner: Object.keys(PERMS) as Perm[],
-  builder: ["work.view", "clients.view", "clients.edit", "sites.edit", "system.retry"],
-  accountant: ["work.view", "finance.view", "finance.edit"],
+  builder: ["work.view", "clients.view", "clients.edit", "sites.edit", "system.retry", "queue.view", "queue.edit"],
+  accountant: ["work.view", "finance.view", "finance.edit", "queue.view"],
 };
 export const can = (role: Role | undefined | null, perm: Perm) => !!role && GRANTS[role]?.includes(perm);
 export const grantsOf = (role: Role) => GRANTS[role];
@@ -28,7 +31,7 @@ export const grantsOf = (role: Role) => GRANTS[role];
 export const PAGE_PERM: Record<string, Perm> = {
   "/": "work.view", "/workflow": "work.view", "/spec": "work.view",
   "/inbox": "clients.view", "/clients": "clients.view",
-  "/builder": "sites.edit", "/finance": "finance.view", "/settings": "team.manage",
+  "/builder": "sites.edit", "/queue": "queue.view", "/finance": "finance.view", "/settings": "team.manage",
 };
 export const homeFor = (role: Role) => "/";
 
