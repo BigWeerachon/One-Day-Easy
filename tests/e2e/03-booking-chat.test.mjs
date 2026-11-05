@@ -17,6 +17,8 @@ before(async () => {
   await lineText(U2, "สวัสดีครับ");
 });
 after(closeDb);
+// ผู้ให้บริการแยกสำหรับเทสต์ที่ใช้เวลา "ตอนนี้" · กันชนกับคิวตัวอย่างใน seed ไม่ว่ารันตอนกี่โมง
+const freeResource = async () => (await sql(`insert into booking_resources (name) values ('e2e-' || gen_random_uuid()) returning id`))[0].id;
 
 test("ข้อความทั่วไป → บอทไม่ตอบ และยังอยู่ในกล่องข้อความ (ยังไม่อ่าน)", async () => {
   await new Promise((r) => setTimeout(r, 800));
@@ -124,8 +126,8 @@ test("ยกเลิกคิว → ถามยืนยัน → ยกเ�
 
 test("ใกล้เวลานัดเกินกำหนด → ยกเลิกเองไม่ได้", async () => {
   const id = (await sql(`insert into bookings (client_id, customer_name, service_code, resource_id, starts_at, ends_at, busy_until, status, queue_no, source, created_by)
-    select ct.client_id, 'x', 'CONSULT', 'b0000000-0000-4000-8000-000000000001', now() + interval '1 hour', now() + interval '90 minute', now() + interval '100 minute', 'confirmed', 77, 'line', 'test'
-    from contacts ct where ct.value = $1 returning id`, [U2]))[0].id;
+    select ct.client_id, 'x', 'CONSULT', $2::uuid, now() + interval '1 hour', now() + interval '90 minute', now() + interval '100 minute', 'confirmed', 77, 'line', 'test'
+    from contacts ct where ct.value = $1 returning id`, [U2, await freeResource()]))[0].id;
   const m = await chat(U2, () => linePostback(U2, `bk:xq:${id}`));
   assert.match(m.text, /ยกเลิกเองได้ถึง/);
   assert.equal(await val(`select status from bookings where id = $1`, [id]), "confirmed");
@@ -148,8 +150,8 @@ test("ปิดจองผ่าน LINE → บอทเงียบ ข้อ
 
 test("cron ส่งเตือนก่อนถึงคิวครั้งเดียว", async () => {
   const id = (await sql(`insert into bookings (client_id, customer_name, service_code, resource_id, starts_at, ends_at, busy_until, status, queue_no, source, created_by, created_at)
-    select ct.client_id, 'x', 'CONSULT', 'b0000000-0000-4000-8000-000000000002', now() + interval '5 hour', now() + interval '330 minute', now() + interval '340 minute', 'confirmed', 78, 'line', 'test', now() - interval '3 day'
-    from contacts ct where ct.value = $1 returning id`, [U2]))[0].id;
+    select ct.client_id, 'x', 'CONSULT', $2::uuid, now() + interval '5 hour', now() + interval '330 minute', now() + interval '340 minute', 'confirmed', 78, 'line', 'test', now() - interval '3 day'
+    from contacts ct where ct.value = $1 returning id`, [U2, await freeResource()]))[0].id;
   await cron("booking");
   await cron("booking");
   assert.ok(await val(`select reminded_at is not null from bookings where id = $1`, [id]));

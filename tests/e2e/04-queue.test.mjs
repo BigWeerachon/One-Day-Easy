@@ -76,6 +76,9 @@ test("ทีมจองคิวให้ลูกค้า (เลือกบ
 });
 
 test("รับ walk-in ตอนนี้ → มาถึงแล้วทันที (แทรกคิวได้)", async () => {
+  // คนว่างที่ทำบริการแรกได้ · คิวตัวอย่างใน seed อาจทำให้ทั้งสองคนไม่ว่าง ขึ้นกับเวลาที่รันเทสต์
+  const r = (await sql(`insert into booking_resources (name, sort) values ('e2e-walkin', 99) returning id`))[0].id;
+  await sql(`insert into booking_service_resources select code, $1 from booking_services`, [r]);
   const p = await loginAs("owner");
   await p.goto(`${URLS.studio}/queue`);
   await p.fill("input[placeholder='ชื่อลูกค้า walk-in']", "ลูกค้าเดินเข้า");
@@ -104,7 +107,8 @@ test("ตั้งค่า: เพิ่มบริการ · เวลา�
   await svc.locator("input[name=maxPerDay]").fill("5");
   await act(p, svc.getByRole("button", { name: "บันทึกบริการ" }));
   assert.equal(await errorText(p), null);
-  assert.equal(await val(`select duration_min || '/' || max_per_day || '/' || (select count(*) from booking_service_resources where service_code = 'NAILS') from booking_services where code = 'NAILS'`), "45/5/2");
+  assert.equal(await val(`select duration_min || '/' || max_per_day || '/' || (select count(*) from booking_service_resources where service_code = 'NAILS') from booking_services where code = 'NAILS'`),
+    `45/5/${await val(`select count(*)::int from booking_resources where active`)}`); // ฟอร์มติ๊กผู้ให้บริการที่ใช้งานอยู่ทุกคนไว้ให้
   // รหัสผิดรูปแบบ
   await svc.locator("input[name=code]").fill("ผิด");
   await svc.locator("input[name=name]").fill("x");

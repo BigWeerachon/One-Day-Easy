@@ -155,8 +155,14 @@ export async function createBooking(n: NewBooking): Promise<Booking> {
       }
       resourceId = ok[0].resourceId;
     }
-    // แทรกคิว (force) โดยไม่เลือกคน → คนที่ทำบริการนี้ได้และไม่ได้กำลังให้บริการ
-    if (!resourceId && n.force) resourceId = (await rows<{ id: string }>(c, `select r::text as id from unnest($1::uuid[]) r order by exists (select 1 from bookings b where b.resource_id = r and b.status = 'in_service') limit 1`, [service.resourceIds]))[0]?.id ?? null;
+    // แทรกคิว (force) โดยไม่เลือกคน → คนที่ทำบริการนี้ได้และว่างตลอดช่วงเวลานั้น
+    if (!resourceId && n.force) {
+      const end0 = new Date(n.start.getTime() + (service.durationMin + service.bufferMin) * 60_000);
+      resourceId = (await rows<{ id: string }>(c, `select r::text as id from unnest($1::uuid[]) r where not exists (select 1 from bookings b where b.resource_id = r
+        and b.status in ('held','confirmed','checked_in','in_service') and not (b.status = 'held' and b.hold_expires_at < now()) and tstzrange(b.starts_at, b.busy_until, '[)') && tstzrange($2, $3, '[)')) limit 1`,
+        [service.resourceIds, n.start, end0]))[0]?.id ?? null;
+      if (!resourceId) throw new BookingError("ทุกคนติดคิวในช่วงเวลานี้ เลือกผู้ให้บริการเองหรือรอคิวว่าง");
+    }
     if (!resourceId) throw new BookingError("ต้องเลือกผู้ให้บริการ");
     const end = new Date(n.start.getTime() + service.durationMin * 60_000);
     const busyUntil = new Date(end.getTime() + service.bufferMin * 60_000);
