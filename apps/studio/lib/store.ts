@@ -483,7 +483,7 @@ export async function notifySlipResult(slipId: string, outcome: "approved" | "re
   const rc = outcome === "approved" ? await one<{ no: string }>(`select no from documents where type = 'RC' and client_id = $1 order by no desc limit 1`, [s.client_id]) : undefined;
   await sendSystemMessage(s.client_id, outcome === "approved"
     ? `ได้รับชำระ ${((s.amount ?? 0) / 100).toLocaleString("th-TH")} บาท สำหรับ ${s.doc_no} เรียบร้อยแล้ว ขอบคุณค่ะ 🙏${rc ? ` (ใบเสร็จ ${rc.no})` : ""}`
-    : "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบและจะแจ้งกลับโดยเร็ว");
+    : "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบ แล้วจะแจ้งผลในแชทนี้");
 }
 
 export const clientFiles = (clientId: string) => q<{ id: string; mime: string; at: string }>(`select id::text, mime, created_at::text at from client_files where client_id = $1 order by id desc limit 30`, [clientId]);
