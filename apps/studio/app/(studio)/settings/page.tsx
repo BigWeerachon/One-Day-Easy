@@ -3,11 +3,13 @@ import { addStaffAction, updateStaffAction } from "@/lib/auth-actions";
 import { ROLES, ROLE_LABEL, PERMS, grantsOf } from "@/lib/permissions";
 import { Err } from "@/components/ui";
 import { Header, Card } from "@/components/ui";
-const ENV = [["DATABASE_URL", "Supabase Postgres (server เท่านั้น)"], ["LINE_CHANNEL_SECRET", "ตรวจลายเซ็น webhook /api/line/webhook"], ["LINE_CHANNEL_ACCESS_TOKEN", "ส่งข้อความ push (long-lived)"], ["CRON_SECRET", "ป้องกัน /api/cron/line (ลองส่งซ้ำ)"], ["ANTHROPIC_API_KEY", "Claude: สรุปแชท · แก้เว็บ · อ่านสลิป"], ["SHOP_RECEIVER_ACCOUNTS", "บัญชีร้านสำหรับตรวจสลิป"], ["SHOP_RECEIVER_NAMES", "ชื่อบัญชีร้านสำหรับตรวจสลิป"]];
+import { listOutbox } from "@/lib/notify";
+import { retryEmailAction } from "@/lib/notify-actions";
+const ENV = [["DATABASE_URL", "Supabase Postgres (server เท่านั้น)"], ["LINE_CHANNEL_SECRET", "ตรวจลายเซ็น webhook /api/line/webhook"], ["LINE_CHANNEL_ACCESS_TOKEN", "ส่งข้อความ push (long-lived)"], ["CRON_SECRET", "ป้องกัน /api/cron/line (ลองส่งซ้ำ)"], ["ANTHROPIC_API_KEY", "Claude: สรุปแชท · แก้เว็บ · อ่านสลิป"], ["SHOP_RECEIVER_ACCOUNTS", "บัญชีร้านสำหรับตรวจสลิป"], ["SHOP_RECEIVER_NAMES", "ชื่อบัญชีร้านสำหรับตรวจสลิป"], ["RESEND_API_KEY", "ส่งอีเมลแจ้งเตือน (Resend)"], ["EMAIL_FROM", "ผู้ส่งอีเมล เช่น Studio <noti@โดเมนร้าน>"]];
 export default async function Settings({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
   const me = await requirePage("team.manage");
   const { err } = await searchParams;
-  const team = await listStaff();
+  const [team, outbox] = await Promise.all([listStaff(), listOutbox(30)]);
   return (<>
     <Header crumb="ตั้งค่า" title="ตั้งค่า & ระบบ" />
     <div className="bd"><div className="row">
@@ -33,6 +35,13 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <button className="btn">เพิ่ม</button>
           <div className="sm mut" style={{ width: "100%" }}>ส่งรหัสชั่วคราวให้สมาชิกเอง · ระบบบังคับให้ตั้งรหัสใหม่ตอนเข้าครั้งแรก</div>
         </form></Card>
+        <Card title="อีเมลแจ้งเตือนล่าสุด" right={<span className="sm mut">ลองส่งซ้ำอัตโนมัติ 5 ครั้งผ่าน cron</span>} pad={false}><div className="tw"><table>
+          <thead><tr><th>เรื่อง</th><th>ถึง</th><th>สถานะ</th><th /></tr></thead><tbody>
+          {outbox.map((m) => <tr key={m.id}><td>{m.subject}<div className="sm mut mono">{m.event} · {new Date(m.at).toLocaleString("th-TH")}</div></td><td className="sm">{m.to}</td>
+            <td><span className={"chip " + ({ sent: "c-g", queued: "c-b", sending: "c-b", failed: "c-y", dead: "c-r", skipped: "" } as Record<string, string>)[m.status]}>{({ sent: "ส่งแล้ว", queued: "รอส่ง", sending: "กำลังส่ง", failed: `ล้มเหลว (${m.attempts})`, dead: "ส่งไม่สำเร็จ", skipped: "ข้าม" } as Record<string, string>)[m.status]}</span>{m.error && <div className="sm" style={{ color: "#c62828" }}>{m.error}</div>}</td>
+            <td>{["dead", "failed", "skipped"].includes(m.status) && <form action={retryEmailAction}><input type="hidden" name="id" value={m.id} /><button className="btn o sm">ส่งใหม่</button></form>}</td></tr>)}
+          {!outbox.length && <tr><td colSpan={4} className="mut">ยังไม่มีอีเมล</td></tr>}
+        </tbody></table></div></Card>
         <Card title="สิทธิ์ตามบทบาท" pad={false}><div className="tw"><table><thead><tr><th>สิทธิ์</th>{ROLES.map((r) => <th key={r}>{ROLE_LABEL[r]}</th>)}</tr></thead><tbody>
           {(Object.keys(PERMS) as (keyof typeof PERMS)[]).map((p) => <tr key={p}><td className="sm">{PERMS[p]}</td>{ROLES.map((r) => <td key={r}>{grantsOf(r).includes(p) ? "✓" : "—"}</td>)}</tr>)}
         </tbody></table></div></Card>

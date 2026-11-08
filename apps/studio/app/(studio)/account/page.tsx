@@ -2,9 +2,13 @@ import { requireStaff } from "@/lib/auth";
 import { changePasswordAction } from "@/lib/auth-actions";
 import { ROLE_LABEL, PERMS, grantsOf } from "@/lib/permissions";
 import { Header, Card, Err } from "@/components/ui";
+import { one } from "@/lib/db";
+import { GROUPS, groupsFor } from "@/lib/notify";
+import { saveEmailPrefsAction } from "@/lib/notify-actions";
 export default async function Account({ searchParams }: { searchParams: Promise<{ err?: string; ok?: string; first?: string }> }) {
   const me = await requireStaff();
   const { err, ok, first } = await searchParams;
+  const prefs = (await one<{ p: Record<string, boolean> }>(`select email_prefs p from staff where id = $1`, [me.id]))?.p ?? {};
   return (<>
     <Header crumb="บัญชีของฉัน" title={me.name} />
     <div className="bd"><div className="row">
@@ -16,6 +20,13 @@ export default async function Account({ searchParams }: { searchParams: Promise<
           <label className="sm">รหัสผ่านใหม่ (≥ 10 ตัว มีตัวอักษรและตัวเลข)<input className="inp" name="next" type="password" autoComplete="new-password" required minLength={10} /></label>
           <label className="sm">ยืนยันรหัสผ่านใหม่<input className="inp" name="confirm" type="password" autoComplete="new-password" required /></label>
           <div><button className="btn">บันทึก</button></div>
+        </form>
+      </Card>
+      <Card className="side" title="อีเมลแจ้งเตือน" right={<span className="sm mut">ส่งถึง {me.email}</span>}>
+        {ok === "prefs" && <div className="chip c-g" style={{ marginBottom: 10 }}>บันทึกแล้ว</div>}
+        <form action={saveEmailPrefsAction} className="list" style={{ gap: 8 }}>
+          {groupsFor(me.role).map((g) => <label key={g} className="f sm"><input type="checkbox" name={g} defaultChecked={prefs[g] !== false} style={{ width: "auto" }} /> {GROUPS[g]}</label>)}
+          <div><button className="btn o sm">บันทึก</button></div>
         </form>
       </Card>
       <Card className="side" title="สิทธิ์ของฉัน" right={<span className="chip c-b">{ROLE_LABEL[me.role]}</span>}>

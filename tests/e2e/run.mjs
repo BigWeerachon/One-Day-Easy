@@ -13,7 +13,7 @@ if (!dbUrl) { console.error("ต้องตั้ง TEST_DATABASE_URL (ฐา�
 if (/supabase\.(co|com)|pooler/.test(dbUrl) && process.env.E2E_ALLOW_REMOTE !== "1") {
   console.error("TEST_DATABASE_URL ดูเหมือนฐานข้อมูลจริง (Supabase) · e2e จะลบข้อมูลทั้งหมด · ถ้าตั้งใจจริงให้ตั้ง E2E_ALLOW_REMOTE=1"); process.exit(2);
 }
-const P = { studio: 3100, engine: 3101, line: 3200, claude: 3300, vercel: 3400 };
+const P = { studio: 3100, engine: 3101, line: 3200, claude: 3300, vercel: 3400, email: 3500 };
 const env = {
   ...process.env, NODE_ENV: "production",
   DATABASE_URL: dbUrl, INSECURE_COOKIES: "1",
@@ -23,6 +23,7 @@ const env = {
   ANTHROPIC_API_KEY: "e2e-anthropic-key", ANTHROPIC_BASE_URL: `http://127.0.0.1:${P.claude}`,
   VERCEL_TOKEN: "vtok", VERCEL_TEAM_ID: "team_e2e", ENGINE_PROJECT_ID: "engine-e2e", VERCEL_API_BASE: `http://127.0.0.1:${P.vercel}`, PLATFORM_DOMAIN: "onedayeasy.app",
   DOMAIN_SSL_PROBE: "off",
+  RESEND_API_KEY: "e2e-resend-key", EMAIL_FROM: "Studio <noti@e2e.test>", EMAIL_API_BASE: `http://127.0.0.1:${P.email}`,
   PROMPTPAY_ID: "0812345678", SHOP_RECEIVER_NAMES: "บจก. วันเดย์ อีซี่", SHOP_RECEIVER_ACCOUNTS: "123-4-56789-0", SLIP_AUTO_APPROVE: "on", SLIP_MAX_AGE_DAYS: "3",
   SELLER_NAME: "บริษัท วันเดย์ อีซี่ จำกัด", SELLER_TAX_ID: "0105555555555",
   REGISTRANT_FIRST_NAME: "Big", REGISTRANT_LAST_NAME: "Test", REGISTRANT_EMAIL: "ops@e2e.test", REGISTRANT_PHONE: "+66.812345678", REGISTRANT_ADDRESS: "1 Test Rd", REGISTRANT_ZIP: "10110", REGISTRANT_CITY: "Bangkok", REGISTRANT_STATE: "Bangkok", REGISTRANT_COMPANY: "One Day Easy Co., Ltd.", REGISTRANT_COUNTRY: "TH",
@@ -51,7 +52,7 @@ if (process.env.E2E_SKIP_BUILD !== "1" || apps.some(([, d]) => !existsSync(join(
     if (r.status !== 0) process.exit(r.status ?? 1);
   }
 }
-const mocks = await startMocks({ line: P.line, claude: P.claude, vercel: P.vercel });
+const mocks = await startMocks({ line: P.line, claude: P.claude, vercel: P.vercel, email: P.email });
 let code = 1;
 try {
   // ฐานข้อมูลต้องมีตารางก่อน server เริ่ม (แต่ละไฟล์ทดสอบจะล้างใหม่เองอีกครั้ง)

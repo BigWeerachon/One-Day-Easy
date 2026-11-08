@@ -107,14 +107,35 @@ export function vercelMock() {
   return { server, state: s };
 }
 
-export async function startMocks(ports = { line: 3200, claude: 3300, vercel: 3400 }) {
-  const all = { line: lineMock(), claude: claudeMock(), vercel: vercelMock() };
+// ---------- อีเมล (Resend) ----------
+// key ที่ยอมรับ: "e2e-resend-key" · /__mode: ok | 500 | 422 · ส่ง Idempotency-Key เดิมซ้ำ = คืน id เดิม ไม่นับเป็นฉบับใหม่
+export function emailMock() {
+  const s = { mode: "ok", log: [], seen: new Map(), reset() { this.mode = "ok"; this.log = []; this.seen = new Map(); } };
+  const server = http.createServer(async (req, res) => {
+    const b = await readBody(req);
+    if (control(s, req, res, b)) return;
+    if (req.headers.authorization !== "Bearer e2e-resend-key") return json(res, 401, { message: "API key is invalid" });
+    if (s.mode === "500") return json(res, 500, { message: "internal" });
+    if (s.mode === "422") return json(res, 422, { message: "Invalid `to` field" });
+    const key = req.headers["idempotency-key"];
+    if (key && s.seen.has(key)) return json(res, 200, { id: s.seen.get(key) });
+    const id = `em_${s.log.length + 1}`;
+    if (key) s.seen.set(key, id);
+    const body = JSON.parse(b);
+    s.log.push({ id, key, ...body, attachments: (body.attachments ?? []).map((a) => ({ filename: a.filename, bytes: Buffer.from(a.content, "base64").length, head: Buffer.from(a.content, "base64").subarray(0, 4).toString() })) });
+    json(res, 200, { id });
+  });
+  return { server, state: s };
+}
+
+export async function startMocks(ports = { line: 3200, claude: 3300, vercel: 3400, email: 3500 }) {
+  const all = { line: lineMock(), claude: claudeMock(), vercel: vercelMock(), email: emailMock() };
   await Promise.all(Object.entries(all).map(([k, m]) => new Promise((r, j) => m.server.once("error", j).listen(ports[k], "127.0.0.1", r))));
   return { ...all, close: () => Promise.all(Object.values(all).map((m) => new Promise((r) => m.server.close(r)))) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const e = process.env;
-  await startMocks({ line: Number(e.MOCK_LINE_PORT ?? 3200), claude: Number(e.MOCK_CLAUDE_PORT ?? 3300), vercel: Number(e.MOCK_VERCEL_PORT ?? 3400) });
-  console.log("mocks up: LINE :3200 · Claude :3300 · Vercel :3400");
+  await startMocks({ line: Number(e.MOCK_LINE_PORT ?? 3200), claude: Number(e.MOCK_CLAUDE_PORT ?? 3300), vercel: Number(e.MOCK_VERCEL_PORT ?? 3400), email: Number(e.MOCK_EMAIL_PORT ?? 3500) });
+  console.log("mocks up: LINE :3200 · Claude :3300 · Vercel :3400 · Email :3500");
 }

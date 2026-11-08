@@ -22,6 +22,7 @@
 10. [โดเมนและ SSL](#10-โดเมนและ-ssl)
 11. [การเงิน สลิป และ PDF](#11-การเงิน-สลิป-และ-pdf-finance)
 12. [Portal ฝั่งลูกค้า](#12-portal-ฝั่งลูกค้า)
+12a. [อีเมลแจ้งเตือน](#12a-อีเมลแจ้งเตือน)
 13. [Workflow, งานตามเวลา (cron) และการแก้ปัญหา](#13-workflow-งานตามเวลา-cron-และการแก้ปัญหา)
 14. [Site Engine](#14-site-engine)
 15. [Deploy ขึ้น Vercel + Supabase](#15-deploy-ขึ้น-vercel--supabase)
@@ -413,6 +414,32 @@ npm run dev
 
 ---
 
+## 12a. อีเมลแจ้งเตือน
+
+ระบบส่งอีเมลผ่าน [Resend](https://resend.com) ตั้ง `RESEND_API_KEY` และ `EMAIL_FROM` (ต้องยืนยันโดเมนผู้ส่งใน Resend ก่อน) · ยังไม่ตั้ง = ระบบบันทึกไว้เป็น "ข้าม" ไม่ส่ง
+
+**ทีมงาน** (ส่งตามสิทธิ์ของบทบาท · แต่ละคนปิดรับรายกลุ่มได้ที่หน้า **บัญชีของฉัน**)
+
+| กลุ่ม | เหตุการณ์ | ได้รับ |
+|---|---|---|
+| คิว | คิวใหม่ (ทีมจองให้ / walk-in / ลูกค้ายืนยันใน LINE) · ยกเลิกคิวพร้อมเหตุผล | Owner, Builder |
+| การเงิน | รับชำระแล้ว (บอกยอดคงเหลือหรือเลขใบเสร็จ) · สลิปรอตรวจ | Owner, Accountant |
+| ลูกค้าใน Portal | ส่งข้อมูลร้าน · อนุมัติเว็บ · ขอแก้ (พร้อมข้อความที่ขอ) | Owner, Builder |
+| ระบบ | ส่ง LINE ถึงลูกค้าไม่สำเร็จครบทุกครั้ง | Owner |
+
+**ลูกค้า** (เฉพาะลูกค้าที่มีอีเมล: ทีมใส่ในหน้าลูกค้า หรือลูกค้ากรอกเองใน Portal)
+
+- ยืนยันการจองคิว · คิวถูกยกเลิก (พร้อมเหตุผล)
+- ใบแจ้งหนี้ / ใบเสนอราคา / ใบต่ออายุ **แนบ PDF**
+- รับชำระแล้ว · ชำระครบแนบ **ใบเสร็จ PDF** · ชำระบางส่วนบอกยอดคงเหลือ
+
+**การส่ง**
+
+- ทุกฉบับเข้ากล่องขาออก (`email_outbox`) แล้วส่งทันที · ล้มเหลวชั่วคราวลองใหม่ผ่าน cron `/api/cron/email` ทุก 5 นาที สูงสุด 5 ครั้ง
+- ใช้ `Idempotency-Key` เดิมทุกครั้งที่ลองใหม่ ผู้ให้บริการจึงไม่ส่งซ้ำ · เหตุการณ์เดิมถูกเรียกซ้ำก็ไม่สร้างฉบับใหม่
+- ดูอีเมลล่าสุดและกด **ส่งใหม่** ได้ที่หน้า **ตั้งค่า & ระบบ** (Owner)
+- อีเมลแจ้งเตือนล้มเหลวไม่ทำให้งานหลักล้ม เช่น จองคิวสำเร็จแม้ส่งอีเมลไม่ได้
+
 ## 13. Workflow, งานตามเวลา (cron) และการแก้ปัญหา
 
 ### 13.1 หน้า Workflow (`/workflow`)
@@ -426,6 +453,7 @@ npm run dev
 |---|---|---|
 | `/api/cron/line` | ทุก 5 นาที | ส่ง LINE ที่ล้มเหลวซ้ำตาม backoff · ครบ 3 ครั้ง → dead-letter |
 | `/api/cron/domains` | ทุก 10 นาที | ตรวจยืนยันโดเมน DNS และ SSL |
+| `/api/cron/email` | ทุก 5 นาที | ส่งอีเมลที่ค้าง · ลองใหม่ฉบับที่ล้มเหลว |
 | `/api/cron/booking` | ทุก 5 นาที | ปล่อยที่ที่ไม่ยืนยัน · ส่ง LINE เตือนก่อนนัด · ล้างข้อมูลกันซ้ำของ webhook |
 
 ทุก path ต้องส่ง header `Authorization: Bearer $CRON_SECRET` (Vercel Cron ส่งให้อัตโนมัติ) ถ้าไม่ส่งจะได้ 401
@@ -524,7 +552,7 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/studio_e2e npm run test:e
 
 1. ตรวจว่า `TEST_DATABASE_URL` ไม่ใช่ฐานข้อมูลจริง ถ้า URL มี `supabase.co` หรือ `pooler` จะหยุด เว้นแต่ตั้ง `E2E_ALLOW_REMOTE=1`
 2. build Studio และ Engine (`next build`)
-3. เปิดบริการจำลอง LINE (:3200), Claude (:3300), Vercel (:3400)
+3. เปิดบริการจำลอง LINE (:3200), Claude (:3300), Vercel (:3400), อีเมล (:3500)
 4. reset ฐานข้อมูล แล้วเปิด Studio (:3100) และ Engine (:3101) ด้วย env ทดสอบ
 5. รัน `node --test` ทีละไฟล์ตามลำดับเลข แต่ละไฟล์ reset DB + seed + สร้างบัญชี 3 บทบาทใหม่ ไฟล์จึงไม่พึ่งกัน
 6. ปิดทุกอย่าง แล้วคืน exit code (0 = ผ่านหมด) ใช้ใน CI ได้ทันที
@@ -558,6 +586,7 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/studio_e2e npm run test:e
 | `05-finance-slip` | สลิป LINE อนุมัติอัตโนมัติ → ใบเสร็จ → แจ้งลูกค้า · ไม่มีใบค้าง · ref ซ้ำ · ไม่ใช่สลิป · อัปโหลด + ปฏิเสธ · ไฟล์ไม่ใช่รูป · ออกใบแจ้งหนี้ + PDF |
 | `06-ai` | สรุปจากแชท · ข้อเสนอ → ใช้ → เวอร์ชันเพิ่ม · ผิด schema กดใช้ไม่ได้ · ข้อเสนอเก่า · ถูกปฏิเสธ / key ผิด · รูปแบบคำขอ (structured output, cache) |
 | `07-domains` | โดเมนผิด/ถูกใช้แล้ว · ผูก → DNS → cron → active · builder ไม่เห็นปุ่มซื้อ · ซื้อ: เกินเพดาน / ยืนยันผิด / ราคาเปลี่ยน / สำเร็จ |
+| `09-email` | ตั้งอีเมลลูกค้า (+ validation) · จองคิว → ทีมตามบทบาท + ลูกค้า · ปิดรับรายกลุ่ม · ยกเลิกคิว · ชำระครบ → ใบเสร็จ PDF แนบ · สลิปรอตรวจ · ออกใบแจ้งหนี้ → PDF แนบ · ผู้ให้บริการล่ม → retry · 422 → dead → ส่งใหม่ · กันส่งซ้ำ · Portal กรอกอีเมล |
 | `08-engine-portal` | Engine เปิดเว็บตาม Host · โดเมนไม่รู้จัก · ลิงก์ตัวอย่างลงลายเซ็น (ลายเซ็นผิดเปิดไม่ได้) · Portal บนมือถือ |
 
 ---
@@ -580,6 +609,9 @@ LINE_DATA_API_BASE=http://127.0.0.1:3200
 ANTHROPIC_BASE_URL=http://127.0.0.1:3300
 VERCEL_API_BASE=http://127.0.0.1:3400
 VERCEL_TOKEN=vtok
+EMAIL_API_BASE=http://127.0.0.1:3500
+RESEND_API_KEY=e2e-resend-key
+EMAIL_FROM=Studio <noti@e2e.test>
 ```
 
 ทุก mock มี endpoint ควบคุม:
@@ -594,6 +626,8 @@ VERCEL_TOKEN=vtok
 | Vercel `POST /__price` `{"price":13.5}` | เปลี่ยนราคาโดเมน |
 
 Vercel mock รับเฉพาะ token `vtok` · โดเมน `taken.com` = ถูกใช้แล้ว · ชื่อที่มี `pricey` = แพงเกินเพดาน
+
+Email mock (:3500) รับเฉพาะ key `e2e-resend-key` · `/__mode` = `ok`, `500` (ล่มชั่วคราว), `422` (ส่งไม่ได้ถาวร) · ใน e2e ใช้ `emails(ผู้รับ)` อ่านฉบับที่ส่งแล้ว รวมชื่อไฟล์แนบ
 
 ### 17.2 ตัวช่วยใน `tests/e2e/lib.mjs`
 
@@ -691,9 +725,12 @@ test("owner เห็นคิววันนี้", async () => {
 | `PLATFORM_DOMAIN` | Studio | โดเมนหลักของแพลตฟอร์ม |
 | `DOMAIN_MAX_PRICE_USD` | Studio | เพดานราคาโดเมน (ค่าเริ่มต้น 30) |
 | `REGISTRANT_*` | Studio | ข้อมูลผู้จดโดเมน |
+| `RESEND_API_KEY` | Studio | ส่งอีเมลแจ้งเตือน (Resend) |
+| `EMAIL_FROM` | Studio | ผู้ส่ง เช่น `Studio <noti@โดเมนร้าน>` (โดเมนต้องยืนยันใน Resend) |
+| `EMAIL_REPLY_TO` | Studio | (ไม่บังคับ) อีเมลที่ลูกค้าตอบกลับ |
 | `ENGINE_DEV_HOST` | Engine | ใช้ตอนพัฒนาเท่านั้น (เลือกเว็บที่ localhost) |
 | **เฉพาะการทดสอบ** | | |
-| `LINE_API_BASE`, `LINE_DATA_API_BASE`, `ANTHROPIC_BASE_URL`, `VERCEL_API_BASE` | Studio | ชี้ไป mock |
+| `LINE_API_BASE`, `LINE_DATA_API_BASE`, `ANTHROPIC_BASE_URL`, `VERCEL_API_BASE`, `EMAIL_API_BASE` | Studio | ชี้ไป mock |
 | `DOMAIN_SSL_PROBE=off` | Studio | ข้ามการเปิด https จริงตอนตรวจโดเมน |
 | `INSECURE_COOKIES=1` | Studio | ให้คุกกี้ใช้กับ http ได้ (ห้ามใช้บน production) |
 | `TEST_DATABASE_URL`, `E2E_*`, `PW_CHROMIUM_PATH` | ตัวรัน e2e | ดู[ส่วนที่ 16](#16-การทดสอบอัตโนมัติ) |

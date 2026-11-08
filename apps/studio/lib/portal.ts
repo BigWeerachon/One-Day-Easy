@@ -1,4 +1,6 @@
 import "server-only";
+import { notify } from "./notify";
+import { isEmail } from "./email";
 import { createHash, randomBytes } from "node:crypto";
 import { q, one, tx } from "./db";
 import * as S from "./store";
@@ -64,12 +66,14 @@ export async function requestNewLink(oldToken: string): Promise<"sent" | "no-lin
 }
 
 // ---------- ขั้นที่ 1: ข้อมูลร้าน ----------
-export interface IntakeForm { name: string; phone: string; hours: string; customerType: string; pdpa: boolean; legalName?: string; taxId?: string; branch?: string; address?: string; poNo?: string; wht?: boolean }
+export interface IntakeForm { name: string; phone: string; email?: string; hours: string; customerType: string; pdpa: boolean; legalName?: string; taxId?: string; branch?: string; address?: string; poNo?: string; wht?: boolean }
 export async function submitIntake(ctx: PortalCtx, f: IntakeForm, files: { mime: string; bytes: Buffer }[]) {
   if (!["new_chat", "intake"].includes(ctx.job.stage)) throw new Error("ส่งข้อมูลไปแล้ว ทีมงานกำลังทำเว็บ");
   if (!f.pdpa) throw new Error("ต้องยินยอมให้ใช้ข้อมูลก่อนส่ง");
   if (!f.name.trim()) throw new Error("ต้องใส่ชื่อร้าน");
   if (f.phone && !validThaiPhone(f.phone)) throw new Error("เบอร์โทรไม่ถูกต้อง");
+  const email = f.email?.trim().toLowerCase() ?? "";
+  if (email && !isEmail(email)) throw new Error("อีเมลไม่ถูกต้อง");
   if (!["person", "company", "government", "foreigner"].includes(f.customerType)) throw new Error("ประเภทลูกค้าไม่ถูกต้อง");
   const company = f.customerType === "company" || f.customerType === "government";
   if (company) {
@@ -84,6 +88,10 @@ export async function submitIntake(ctx: PortalCtx, f: IntakeForm, files: { mime:
       [ctx.clientId, f.name.trim(), f.phone.replace(/[\s-]/g, ""), f.hours.trim(), f.customerType,
        company ? f.legalName!.trim() : null, company ? f.taxId!.replace(/\D/g, "") : null, company ? (f.branch || "สำนักงานใหญ่") : null,
        company ? f.address!.trim() : null, company ? (f.poNo?.trim() || null) : null, company ? !!f.wht : false]);
+    if (email) {
+      await c.query(`delete from contacts where client_id = $1 and channel = 'Email'`, [ctx.clientId]);
+      await c.query(`insert into contacts (client_id, channel, value, name) values ($1,'Email',$2,$2) on conflict (channel, value) do update set client_id = excluded.client_id`, [ctx.clientId, email]);
+    }
     for (const file of files) await c.query(`insert into client_files (client_id, mime, bytes) values ($1,$2,$3)`, [ctx.clientId, file.mime, file.bytes]);
     const complete = Boolean(f.name.trim() && f.phone && f.hours.trim());
     await c.query(`update jobs set pdpa_consent = true, checklist_done = $2 where id = $1`, [ctx.jobId, complete]);
@@ -92,6 +100,7 @@ export async function submitIntake(ctx: PortalCtx, f: IntakeForm, files: { mime:
   if (ctx.job.stage === "new_chat") await S.moveJob(ctx.jobId, "intake", "system");
   const j = await one<{ checklist_done: boolean }>(`select checklist_done from jobs where id = $1`, [ctx.jobId]);
   if (j?.checklist_done) await S.moveJob(ctx.jobId, "template", "system");
+  await notify({ type: "portal.intake", clientId: ctx.clientId });
 }
 
 // ---------- ขั้นที่ 2: ตรวจเว็บ ----------
@@ -99,6 +108,7 @@ export async function approveSite(ctx: PortalCtx) {
   if (ctx.job.stage === "invoice" || ctx.job.stage === "payment") return; // อนุมัติไปแล้ว
   if (ctx.job.stage !== "client_review") throw new Error("ตอนนี้ยังไม่มีเว็บให้อนุมัติ");
   await S.moveJob(ctx.jobId, "invoice", "client");
+  await notify({ type: "portal.approved", clientId: ctx.clientId });
   // ออกใบแจ้งหนี้จากแคตตาล็อกตามแพ็กเกจทันที (ล็อกราคา ณ ตอนออก) · ไม่มีแพ็กเกจ = รอทีมออกใบเอง
   const item = ctx.client.pkg ? PACKAGE_ITEM[ctx.client.pkg] : undefined;
   const price = item ? await one<{ price: number }>(`select price_satang::int price from catalog_items where code = $1 and active`, [item]) : undefined;
@@ -118,6 +128,7 @@ async function recordRequest(ctx: PortalCtx, text: string, paid: boolean) {
   // ให้ทีมเห็นในกล่องข้อความ
   await q(`insert into messages (conversation_id, sender, body) select id, 'client', $2 from conversations where client_id = $1`, [ctx.clientId, `[ขอแก้รอบ ${round}${paid ? " · ชำระเพิ่ม" : ""}] ${text}`]);
   await S.moveJob(ctx.jobId, "template", "client");
+  await notify({ type: "portal.edit", clientId: ctx.clientId, text });
 }
 export async function requestEdit(ctx: PortalCtx, text: string): Promise<"sent" | "needs-payment"> {
   if (ctx.job.stage !== "client_review") throw new Error("ตอนนี้ยังขอแก้ไม่ได้");

@@ -14,6 +14,7 @@ export const URLS = {
   line: `http://127.0.0.1:${env.MOCK_LINE_PORT ?? 3200}`,
   claude: `http://127.0.0.1:${env.MOCK_CLAUDE_PORT ?? 3300}`,
   vercel: `http://127.0.0.1:${env.MOCK_VERCEL_PORT ?? 3400}`,
+  email: `http://127.0.0.1:${env.MOCK_EMAIL_PORT ?? 3500}`,
 };
 export const SECRETS = { line: env.LINE_CHANNEL_SECRET ?? "e2e-line-secret", cron: env.CRON_SECRET ?? "e2e-cron-secret" };
 // บัญชีทดสอบ (สร้างใหม่ทุกครั้งที่ resetDb)
@@ -46,7 +47,9 @@ export async function resetDb() {
 // ---------- mocks ----------
 export const mockLog = async (name) => (await fetch(`${URLS[name]}/__log`)).json();
 export const mockPost = (name, path, body = "") => fetch(`${URLS[name]}${path}`, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
-export const resetMocks = () => Promise.all(["line", "claude", "vercel"].map((n) => mockPost(n, "/__reset")));
+export const resetMocks = () => Promise.all(["line", "claude", "vercel", "email"].map((n) => mockPost(n, "/__reset")));
+/** อีเมลที่ส่งออกไปแล้ว (ล่าสุดอยู่ท้าย) · กรองตามผู้รับได้ */
+export const emails = async (to) => (await mockLog("email")).filter((m) => !to || m.to.includes(to));
 /** ข้อความที่ระบบ push ไปหาลูกค้าทาง LINE (ล่าสุดอยู่ท้าย) */
 export async function linePushes(to) {
   return (await mockLog("line")).filter((l) => l.url.includes("/message/push") && (!to || l.body.to === to)).map((l) => ({ ...l.body.messages[0], to: l.body.to, retryKey: l.retryKey }));
