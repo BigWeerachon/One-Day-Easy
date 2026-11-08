@@ -66,6 +66,8 @@ test("อัปโหลดสลิปยอดผิดที่หน้า�
   const row = p.locator(".qi", { hasText: `#${up.id}` });
   await act(p, row.getByRole("button", { name: "ปฏิเสธ" }));
   assert.equal(await val(`select status from slips where id = $1`, [up.id]), "rejected");
+  // คนตัดสินแล้ว ลูกค้าได้รับแจ้งทาง LINE
+  await waitFor(async () => (await linePushes(U)).some((m) => /ยืนยันการชำระไม่ได้/.test(m.text)), { message: "ไม่ได้แจ้งลูกค้าหลังปฏิเสธสลิป" });
   // ไฟล์ที่ไม่ใช่รูป
   const txt = join(dir, "x.txt"); writeFileSync(txt, "hello");
   await p.setInputFiles("input[name=image]", txt);

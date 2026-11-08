@@ -406,7 +406,8 @@ export const avgTokensPerSite = async () => Number((await one<{ v: string | null
 import { evaluateSlip, type SlipRead } from "./slip-rules";
 import { readSlip, aiConfigured, type SlipImageMime } from "./ai";
 
-export const slipAutoApprove = () => (process.env.SLIP_AUTO_APPROVE ?? "on") !== "off";
+// ค่าเริ่มต้นปิด: คนกดยืนยันทุกใบ · ตั้ง SLIP_AUTO_APPROVE=on เมื่อพร้อมให้ระบบอนุมัติเองเมื่อผ่านทุกกฎ
+export const slipAutoApprove = () => process.env.SLIP_AUTO_APPROVE === "on";
 const list = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 
 /** เก็บรูปสลิปเป็นรายการรอตรวจ · คืน null ถ้าข้อความ LINE นี้เคยรับแล้ว */
@@ -476,14 +477,17 @@ export async function sendSystemMessage(clientId: string, text: string, quick?: 
 export const hasOpenInvoice = async (clientId: string) =>
   Boolean(await one(`select 1 from documents where client_id = $1 and status = 'issued' and type in ('INV','RN') limit 1`, [clientId]));
 
-/** หลังอ่านสลิป: แจ้งลูกค้าทาง LINE */
-export async function notifySlipResult(slipId: string, outcome: "approved" | "review") {
-  const s = await one<{ client_id: string | null; doc_no: string | null; amount: number | null }>(`select coalesce(s.client_id, d.client_id) client_id, s.doc_no, s.amount_satang::int amount from slips s left join documents d on d.no = s.doc_no where s.id = $1`, [slipId]);
+/** แจ้งผลสลิปให้ลูกค้าทาง LINE · ใช้ทั้งตอนรับสลิป (review) และตอนคน/ระบบตัดสิน (approved/rejected) */
+export async function notifySlipResult(slipId: string, outcome: "approved" | "review" | "rejected") {
+  const s = await one<{ client_id: string | null; doc_no: string | null; amount: number | null; doc_status: string | null; left: number | null }>(`select coalesce(s.client_id, d.client_id) client_id, s.doc_no, s.amount_satang::int amount,
+    d.status doc_status, (d.total_satang - d.paid_satang)::int "left" from slips s left join documents d on d.no = s.doc_no where s.id = $1`, [slipId]);
   if (!s?.client_id) return;
-  const rc = outcome === "approved" ? await one<{ no: string }>(`select no from documents where type = 'RC' and client_id = $1 order by no desc limit 1`, [s.client_id]) : undefined;
-  await sendSystemMessage(s.client_id, outcome === "approved"
-    ? `ได้รับชำระ ${((s.amount ?? 0) / 100).toLocaleString("th-TH")} บาท สำหรับ ${s.doc_no} เรียบร้อยแล้ว ขอบคุณค่ะ 🙏${rc ? ` (ใบเสร็จ ${rc.no})` : ""}`
-    : "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบ แล้วจะแจ้งผลในแชทนี้");
+  if (outcome === "review") return sendSystemMessage(s.client_id, "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบ แล้วจะแจ้งผลในแชทนี้");
+  if (outcome === "rejected") return sendSystemMessage(s.client_id, "ขออภัยค่ะ สลิปที่ส่งมายืนยันการชำระไม่ได้ ทีมงานจะทักกลับเพื่อแจ้งรายละเอียด");
+  // ใบเสร็จออกเมื่อชำระครบเท่านั้น · ชำระบางส่วนแจ้งยอดคงเหลือแทน
+  const rc = s.doc_status === "paid" ? await one<{ no: string }>(`select no from documents where type = 'RC' and client_id = $1 order by no desc limit 1`, [s.client_id]) : undefined;
+  const baht = (v: number | null) => ((v ?? 0) / 100).toLocaleString("th-TH");
+  await sendSystemMessage(s.client_id, `ได้รับชำระ ${baht(s.amount)} บาท สำหรับ ${s.doc_no} เรียบร้อยแล้ว ขอบคุณค่ะ 🙏${rc ? ` (ใบเสร็จ ${rc.no})` : s.left ? ` · ยอดคงเหลือ ${baht(s.left)} บาท` : ""}`);
 }
 
 export const clientFiles = (clientId: string) => q<{ id: string; mime: string; at: string }>(`select id::text, mime, created_at::text at from client_files where client_id = $1 order by id desc limit 30`, [clientId]);

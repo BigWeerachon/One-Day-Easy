@@ -51,7 +51,14 @@ export async function addSlipAction(f: FormData) { const me = await requireStaff
     await S.addSlip(str(f, "doc"), amount);
   });
 }
-export async function verifySlipAction(f: FormData) { const me = await requireStaff("finance.edit"); await run("/finance", () => S.verifySlip(str(f, "slip"), f.get("accept") === "1", me.name, str(f, "doc") || undefined)); }
+export async function verifySlipAction(f: FormData) { const me = await requireStaff("finance.edit");
+  const slip = str(f, "slip"), accept = f.get("accept") === "1";
+  await run("/finance", async () => {
+    await S.verifySlip(slip, accept, me.name, str(f, "doc") || undefined);
+    // แจ้งลูกค้าหลังคนตัดสิน · ส่ง LINE ไม่สำเร็จไม่ทำให้การยืนยันล้ม (งาน line.push ลองซ้ำเอง)
+    await S.notifySlipResult(slip, accept ? "approved" : "rejected").catch(() => {});
+  });
+}
 export async function voidDocAction(f: FormData) { const me = await requireStaff("finance.edit"); await run("/finance", () => S.voidDoc(str(f, "doc"))); }
 export async function retryTaskAction(f: FormData) { const me = await requireStaff("system.retry"); await run("/workflow", () => S.retryTask(str(f, "task"))); }
 export async function replyAction(f: FormData) { const me = await requireStaff("clients.edit");
