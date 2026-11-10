@@ -6,6 +6,7 @@ import { type DocType, EXPIRY_DAYS } from "./money";
 import { ALL_EVENTS } from "./events";
 import { randomUUID } from "node:crypto";
 import { pushText, type LineError, type QuickItem } from "./line";
+import { notify } from "./notify";
 
 export type ClientStatus = "lead" | "active" | "care";
 export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; taxId: string | null }
@@ -141,7 +142,7 @@ export async function issueDoc(type: DocType, clientId: string, total: number, j
       if (j?.stage === "invoice") await moveJobTx(c, jobId, "payment", "system");
     }
     return no;
-  });
+  }).then(async (no) => { await notify({ type: "invoice.issued", docNo: no }); return no; });
 }
 
 export async function addSlip(docNo: string, amount: number) {
@@ -263,6 +264,7 @@ export async function runLinePush(taskId: string) {
       await c.query(`update messages set delivery = 'failed', delivery_error = $2 where id = $1`, [t.payload.message_id, err.message]);
       await emit(c, dead ? "task.deadlettered" : "task.failed", { actor: "system", source: "system", after: { task: taskId, error: err.message } });
     });
+    if (dead) await notify({ type: "task.dead", taskId, name: "ส่ง LINE ถึงลูกค้า", error: err.message });
   }
 }
 
@@ -481,6 +483,8 @@ export const hasOpenInvoice = async (clientId: string) =>
 export async function notifySlipResult(slipId: string, outcome: "approved" | "review" | "rejected") {
   const s = await one<{ client_id: string | null; doc_no: string | null; amount: number | null; doc_status: string | null; left: number | null }>(`select coalesce(s.client_id, d.client_id) client_id, s.doc_no, s.amount_satang::int amount,
     d.status doc_status, (d.total_satang - d.paid_satang)::int "left" from slips s left join documents d on d.no = s.doc_no where s.id = $1`, [slipId]);
+  if (outcome === "approved" && s?.doc_no && s.amount) await notify({ type: "payment.received", docNo: s.doc_no, amount: s.amount });
+  if (outcome === "review") await notify({ type: "slip.needs_review", slipId });
   if (!s?.client_id) return;
   if (outcome === "review") return sendSystemMessage(s.client_id, "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบ แล้วจะแจ้งผลในแชทนี้");
   if (outcome === "rejected") return sendSystemMessage(s.client_id, "ขออภัยค่ะ สลิปที่ส่งมายืนยันการชำระไม่ได้ ทีมงานจะทักกลับเพื่อแจ้งรายละเอียด");

@@ -15,6 +15,7 @@ export default function IntakeForm({ token, initial }: { token: string; initial:
       <div className="pt-card">
         <label className="pt-lbl" style={{ marginTop: 0 }} htmlFor="n">ชื่อร้าน</label><input id="n" name="name" className="pt-inp" defaultValue={v.name} required maxLength={80} />
         <label className="pt-lbl" htmlFor="ph">เบอร์โทร</label><input id="ph" name="phone" className="pt-inp" inputMode="tel" placeholder="08x-xxx-xxxx" defaultValue={v.phone} maxLength={20} />
+        <label className="pt-lbl" htmlFor="em">อีเมล (ไม่บังคับ · รับใบแจ้งหนี้และใบเสร็จ)</label><input id="em" name="email" type="email" className="pt-inp" placeholder="you@example.com" defaultValue={v.email} maxLength={120} />
         <label className="pt-lbl" htmlFor="h">เวลาเปิด-ปิด</label><input id="h" name="hours" className="pt-inp" placeholder="เช่น ทุกวัน 07:00–14:00" defaultValue={v.hours} maxLength={80} />
         <label className="pt-lbl" htmlFor="ct">ลูกค้าเป็น</label>
         <select id="ct" name="customerType" className="pt-inp" defaultValue={v.customerType}><option value="person">บุคคลทั่วไป / ร้านค้า</option><option value="company">บริษัท / หจก.</option><option value="government">หน่วยงานราชการ</option><option value="foreigner">ชาวต่างชาติ</option></select>
