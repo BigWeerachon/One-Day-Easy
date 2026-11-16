@@ -1,4 +1,6 @@
 import { requirePage } from "@/lib/auth";
+import { one } from "@/lib/db";
+import { setClientEmailAction } from "@/lib/notify-actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClient, clientNotes, listJobs, listSites, listDocs, listEvents, getIntake } from "@/lib/store";
@@ -17,6 +19,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   const c = await getClient(id); if (!c) notFound();
   const [jobs, sites, docs, notes, ik] = await Promise.all([listJobs(id), listSites(id), listDocs(id), clientNotes(id), getIntake(id)]);
   const intake = ik?.intake;
+  const email = (await one<{ v: string }>(`select value v from contacts where client_id = $1 and channel = 'Email' order by id desc limit 1`, [id]))?.v;
   const evs = jobs.length ? await listEvents(jobs.map((j) => j.id), 20) : [];
   const back = `/clients/${id}`;
   return (<>
@@ -46,7 +49,9 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
           </tbody></table></div></Card>
         </div>
         <div className="side" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <Card title="ข้อมูลติดต่อ"><div className="f"><Av c={c.color} n={c.name} /><div><b>{c.contact}</b><div className="sm mut">{c.channel} · แพ็ก {c.pkg}{c.taxId ? ` · ภาษี ${c.taxId}` : ""}</div></div></div></Card>
+          <Card title="ข้อมูลติดต่อ"><div className="f"><Av c={c.color} n={c.name} /><div><b>{c.contact}</b><div className="sm mut">{c.channel} · แพ็ก {c.pkg}{c.taxId ? ` · ภาษี ${c.taxId}` : ""}</div></div></div>
+            <form action={setClientEmailAction} className="f" style={{ marginTop: 12 }}><input type="hidden" name="client" value={id} />
+              <input className="inp" name="email" type="email" defaultValue={email ?? ""} placeholder="อีเมลลูกค้า (รับยืนยันคิว ใบแจ้งหนี้ ใบเสร็จ)" style={{ flex: 1 }} /><button className="btn o sm">บันทึก</button></form></Card>
           <Card title="ข้อมูลจากแชท (Claude)" right={<form action={extractIntakeAction}><input type="hidden" name="client" value={id} /><SubmitButton className="btn o sm" pending="กำลังอ่านแชท…">{intake ? "สรุปใหม่" : "สรุปจากแชท"}</SubmitButton></form>}>
             {!aiConfigured() && <div className="sm mut">ยังไม่ได้ตั้ง ANTHROPIC_API_KEY</div>}
             {intake ? (<div className="list sm">

@@ -50,6 +50,13 @@ TEST_DATABASE_URL=postgresql://localhost/studio_e2e npm run test:e2e   # end-to-
 - ถอดโดเมนได้ · event `domain.attached`, `ssl.issued`
 - env: `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `ENGINE_PROJECT_ID`, `PLATFORM_DOMAIN`, `DOMAIN_MAX_PRICE_USD`, `REGISTRANT_*`
 
+## อีเมลแจ้งเตือน
+
+ส่งผ่าน Resend (`RESEND_API_KEY`, `EMAIL_FROM`) · migration `0010_email.sql` · cron `/api/cron/email`
+- ทีม: คิวใหม่/ยกเลิก · รับชำระ/สลิปรอตรวจ · ลูกค้าส่งข้อมูล/อนุมัติ/ขอแก้ใน Portal · งานส่ง LINE ล้มเหลว — ส่งตามสิทธิ์ของบทบาท ปิดรับรายกลุ่มได้ที่ "บัญชีของฉัน"
+- ลูกค้าที่มีอีเมล: ยืนยัน/ยกเลิกคิว · ใบแจ้งหนี้และใบเสร็จแนบ PDF
+- รายละเอียด: [docs/USAGE.md](docs/USAGE.md#12a-อีเมลแจ้งเตือน)
+
 ## PDF ใบแจ้งหนี้ / ใบเสร็จ
 
 ปุ่ม **PDF** ในหน้าการเงินและหน้าลูกค้า (สิทธิ์ดูการเงิน) · ลูกค้าดาวน์โหลดใบแจ้งหนี้และใบเสร็จของตัวเองใน Portal

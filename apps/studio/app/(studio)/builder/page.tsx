@@ -2,7 +2,7 @@ import { requirePage } from "@/lib/auth";
 import Link from "next/link";
 import { listSites, getSite, getJob, listJobs, siteVersions, listClients, listProposals, clientFiles } from "@/lib/store";
 import { previewUrl, liveUrl } from "@/lib/preview";
-import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction, proposePatchAction, applyProposalAction, rejectProposalAction, attachDomainAction, checkDomainAction, removeDomainAction, quoteDomainAction, buyDomainAction } from "@/lib/actions";
+import { saveBlockAction, removeBlockAction, rollbackAction, createSiteAction, draftSiteAction, proposePatchAction, applyProposalAction, rejectProposalAction, attachDomainAction, checkDomainAction, removeDomainAction, quoteDomainAction, buyDomainAction } from "@/lib/actions";
 import { listSiteDomains, maxPriceUsd, type Quote } from "@/lib/domains";
 import { vercelConfigured } from "@/lib/vercel";
 import { can } from "@/lib/permissions";
@@ -22,6 +22,11 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
   if (job && !job.siteId) return (<>
     <Header crumb={`สร้างเว็บ · ${name[job.clientId]}`} title="เลือกเทมเพลต" />
     <div className="bd"><Err msg={sp.err} />
+      <Card title="ให้ Claude ร่างทั้งเว็บ" right={<span className="sm mut">เลือกเทมเพลตตามประเภทร้าน · ใช้ข้อมูลร้าน รูป และภาพ ref ของลูกค้า</span>}>
+        <form action={draftSiteAction} className="f"><input type="hidden" name="job" value={job.id} />
+          <SubmitButton className="btn" pending="Claude กำลังร่างเว็บ…">ร่างเว็บอัตโนมัติ</SubmitButton>
+          <span className="sm mut">ใช้เวลาประมาณ 1 นาที · ทีมตรวจและแก้ต่อได้ก่อนส่งลูกค้า</span></form>
+      </Card>
       <Card title={`งาน: ${job.title}`} right={<span className="sm mut">สร้างเว็บใหม่จากเทมเพลต (บล็อก + theme)</span>}>
         <div className="kpis">{TEMPLATES.map((t) => (
           <form key={t.id} action={createSiteAction} className="card kpi"><input type="hidden" name="job" value={job.id} /><input type="hidden" name="template" value={t.id} />
@@ -124,7 +129,7 @@ export default async function Builder({ searchParams }: { searchParams: Promise<
             </div>}
           </Card>
           <Card title="รูปจากลูกค้า" right={<span className="sm mut">ใช้ในบล็อกด้วย "file:&lt;id&gt;"</span>}>
-            {files.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>{files.map((f) => <div key={f.id} className="sm" style={{ textAlign: "center" }}><img src={`/api/files/${f.id}`} alt={`รูป ${f.id}`} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8 }} /><span className="mono">file:{f.id}</span></div>)}</div> : <span className="sm mut">ลูกค้ายังไม่ได้ส่งรูป</span>}
+            {files.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>{files.map((f) => <div key={f.id} className="sm" style={{ textAlign: "center" }}><img src={`/api/files/${f.id}`} alt={`รูป ${f.id}`} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8 }} /><span className="mono">file:{f.id}</span>{f.kind === "ref" && <span className="chip c-p" style={{ marginLeft: 4 }}>ref</span>}</div>)}</div> : <span className="sm mut">ลูกค้ายังไม่ได้ส่งรูป</span>}
           </Card>
           <Card title="เวอร์ชัน (site_versions)" right={versions.length > 0 && <form action={rollbackAction}><input type="hidden" name="site" value={site.id} /><button className="btn o sm">ย้อนกลับ 1 เวอร์ชัน</button></form>}>
             <div className="list">{versions.map((v) => <div key={v.version} className="sm">v{v.version} · {v.note} · {v.by} · {new Date(v.at).toLocaleString("th-TH")}</div>)}{!versions.length && <span className="sm mut">ยังไม่มีประวัติ</span>}</div>

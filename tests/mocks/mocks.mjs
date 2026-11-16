@@ -56,6 +56,22 @@ export function claudeMock() {
       return json(res, 200, msg(JSON.stringify(out)));
     }
     if (s.mode === "refusal") return json(res, 200, msg("", "refusal"));
+    if (sys.includes("ร่างเว็บไซต์ฉบับแรก")) {
+      // ร่างทั้งเว็บ: ใช้รหัสรูปที่ได้รับจริง · มีภาพ ref = คืนสีหลัก · ใส่บล็อกผิด schema 1 อัน และรูปที่ไม่ใช่ของลูกค้า 1 อัน เพื่อทดสอบการคัดออก
+      const parts = body.messages?.[0]?.content ?? [];
+      const ids = parts.filter((c) => c.type === "text").map((c) => c.text.match(/file:(\d+)/)?.[0]).filter(Boolean);
+      const hasRef = parts.some((c) => c.type === "text" && c.text.includes("ภาพ ref"));
+      const shop = JSON.parse((parts.at(-1).text.match(/<shop>(.*?)<\/shop>/s) ?? [])[1] ?? "{}");
+      const ops = [
+        { block: "hero", data_json: JSON.stringify({ title: `${shop.name ?? "ร้าน"} อร่อยทุกวัน`.slice(0, 48), subtitle: "อาหารทำสดใหม่ สั่งง่ายทาง LINE", cta: "สั่งเลย", ...(ids[0] ? { image: ids[0] } : {}) }) },
+        { block: "menu", data_json: JSON.stringify({ items: (shop.menu_or_products?.length ? shop.menu_or_products : [{ name: "เมนูแนะนำ", price: 0 }]).map((m) => ({ name: m.name, price: m.price ?? 0 })) }) },
+        ...(shop.opening_hours ? [{ block: "hours", data_json: JSON.stringify({ days: "ทุกวัน", open: "06:00", close: "22:00" }) }] : []),
+        ...(shop.address ? [{ block: "map", data_json: JSON.stringify({ address: shop.address }) }] : []),
+        { block: "faq", data_json: JSON.stringify({ items: [{ q: "x".repeat(200), a: "ยาวเกิน schema" }] }) },
+        { block: "reviews", data_json: JSON.stringify({ rating: 5, count: 1, items: [{ img: "file:999999" }] }) },
+      ];
+      return json(res, 200, msg(JSON.stringify({ summary: "ร่างหน้าแรก เมนู และข้อมูลติดต่อ · ยังขาด LINE ID", theme_primary: hasRef ? "#1f6f54" : null, ops })));
+    }
     if (sys.includes("สรุปข้อมูลที่ใช้สร้างเว็บ")) return json(res, 200, msg(JSON.stringify({ business_name: "ร้านกาแฟสมชาย", business_type: "คาเฟ่", contact_name: "คุณสมชาย", phone: null, line_id: null, address: null, opening_hours: null,
       products: [{ name: "ลาเต้", price: 65 }], style_notes: ["ชอบโทนไม้อบอุ่น"], suggested_template: "T1", missing: ["เวลาเปิด-ปิด", "ที่อยู่ร้าน"] })));
     const ops = s.mode === "invalid"
@@ -107,14 +123,35 @@ export function vercelMock() {
   return { server, state: s };
 }
 
-export async function startMocks(ports = { line: 3200, claude: 3300, vercel: 3400 }) {
-  const all = { line: lineMock(), claude: claudeMock(), vercel: vercelMock() };
+// ---------- อีเมล (Resend) ----------
+// key ที่ยอมรับ: "e2e-resend-key" · /__mode: ok | 500 | 422 · ส่ง Idempotency-Key เดิมซ้ำ = คืน id เดิม ไม่นับเป็นฉบับใหม่
+export function emailMock() {
+  const s = { mode: "ok", log: [], seen: new Map(), reset() { this.mode = "ok"; this.log = []; this.seen = new Map(); } };
+  const server = http.createServer(async (req, res) => {
+    const b = await readBody(req);
+    if (control(s, req, res, b)) return;
+    if (req.headers.authorization !== "Bearer e2e-resend-key") return json(res, 401, { message: "API key is invalid" });
+    if (s.mode === "500") return json(res, 500, { message: "internal" });
+    if (s.mode === "422") return json(res, 422, { message: "Invalid `to` field" });
+    const key = req.headers["idempotency-key"];
+    if (key && s.seen.has(key)) return json(res, 200, { id: s.seen.get(key) });
+    const id = `em_${s.log.length + 1}`;
+    if (key) s.seen.set(key, id);
+    const body = JSON.parse(b);
+    s.log.push({ id, key, ...body, attachments: (body.attachments ?? []).map((a) => ({ filename: a.filename, bytes: Buffer.from(a.content, "base64").length, head: Buffer.from(a.content, "base64").subarray(0, 4).toString() })) });
+    json(res, 200, { id });
+  });
+  return { server, state: s };
+}
+
+export async function startMocks(ports = { line: 3200, claude: 3300, vercel: 3400, email: 3500 }) {
+  const all = { line: lineMock(), claude: claudeMock(), vercel: vercelMock(), email: emailMock() };
   await Promise.all(Object.entries(all).map(([k, m]) => new Promise((r, j) => m.server.once("error", j).listen(ports[k], "127.0.0.1", r))));
   return { ...all, close: () => Promise.all(Object.values(all).map((m) => new Promise((r) => m.server.close(r)))) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const e = process.env;
-  await startMocks({ line: Number(e.MOCK_LINE_PORT ?? 3200), claude: Number(e.MOCK_CLAUDE_PORT ?? 3300), vercel: Number(e.MOCK_VERCEL_PORT ?? 3400) });
-  console.log("mocks up: LINE :3200 · Claude :3300 · Vercel :3400");
+  await startMocks({ line: Number(e.MOCK_LINE_PORT ?? 3200), claude: Number(e.MOCK_CLAUDE_PORT ?? 3300), vercel: Number(e.MOCK_VERCEL_PORT ?? 3400), email: Number(e.MOCK_EMAIL_PORT ?? 3500) });
+  console.log("mocks up: LINE :3200 · Claude :3300 · Vercel :3400 · Email :3500");
 }

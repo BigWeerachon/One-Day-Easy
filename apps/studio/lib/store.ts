@@ -6,6 +6,7 @@ import { type DocType, EXPIRY_DAYS } from "./money";
 import { ALL_EVENTS } from "./events";
 import { randomUUID } from "node:crypto";
 import { pushText, type LineError, type QuickItem } from "./line";
+import { notify } from "./notify";
 
 export type ClientStatus = "lead" | "active" | "care";
 export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; taxId: string | null }
@@ -141,7 +142,7 @@ export async function issueDoc(type: DocType, clientId: string, total: number, j
       if (j?.stage === "invoice") await moveJobTx(c, jobId, "payment", "system");
     }
     return no;
-  });
+  }).then(async (no) => { await notify({ type: "invoice.issued", docNo: no }); return no; });
 }
 
 export async function addSlip(docNo: string, amount: number) {
@@ -246,13 +247,13 @@ export async function reply(clientId: string, text: string) {
 const MAX_ATTEMPTS = 3;
 /** ทำงาน line.push 1 ครั้ง · ล้มเหลวครบ 3 ครั้ง → dead-letter (ให้คนกดลองใหม่) */
 export async function runLinePush(taskId: string) {
-  const t = await one<{ status: string; attempts: number; payload: { message_id: string; to: string; retry_key: string; quick?: QuickItem[] } }>(`select status, attempts, payload from tasks where id = $1`, [taskId]);
+  const t = await one<{ status: string; attempts: number; payload: { message_id: string; to: string; retry_key: string; quick?: QuickItem[]; image?: string } }>(`select status, attempts, payload from tasks where id = $1`, [taskId]);
   if (!t || !["queued", "failed"].includes(t.status)) return;
   const m = await one<{ body: string }>(`select body from messages where id = $1`, [t.payload.message_id]);
   if (!m) return;
   await q(`update tasks set status = 'running', attempts = attempts + 1 where id = $1`, [taskId]);
   try {
-    await pushText(t.payload.to, m.body, t.payload.retry_key, t.payload.quick);
+    await pushText(t.payload.to, m.body, t.payload.retry_key, t.payload.quick, t.payload.image);
     await q(`update tasks set status = 'done', last_error = null where id = $1`, [taskId]);
     await q(`update messages set delivery = 'sent', delivery_error = null where id = $1`, [t.payload.message_id]);
   } catch (e) {
@@ -263,6 +264,7 @@ export async function runLinePush(taskId: string) {
       await c.query(`update messages set delivery = 'failed', delivery_error = $2 where id = $1`, [t.payload.message_id, err.message]);
       await emit(c, dead ? "task.deadlettered" : "task.failed", { actor: "system", source: "system", after: { task: taskId, error: err.message } });
     });
+    if (dead) await notify({ type: "task.dead", taskId, name: "ส่ง LINE ถึงลูกค้า", error: err.message });
   }
 }
 
@@ -275,9 +277,10 @@ export async function runDueLineTasks(limit = 20) {
 
 export interface IncomingLine { userId: string; messageId: string; text: string; displayName: string | null }
 /** ข้อความเข้าจาก LINE webhook · ลูกค้าใหม่ → สร้าง client + งาน · ส่งซ้ำ (redelivery) ไม่บันทึกซ้ำ */
-export async function receiveLineMessage(m: IncomingLine): Promise<{ status: "new" | "duplicate"; clientId: string }> {
+export async function receiveLineMessage(m: IncomingLine): Promise<{ status: "new" | "duplicate"; clientId: string; firstContact?: boolean }> {
   return tx(async (c) => {
     let [ct] = await rows<{ client_id: string }>(c, `select client_id from contacts where channel = 'LINE' and value = $1`, [m.userId]);
+    const firstContact = !ct;
     if (!ct) {
       const name = m.displayName || `ลูกค้า LINE ${m.userId.slice(-4)}`;
       const [cl] = await rows<{ id: string }>(c, `insert into clients (name, contact_name, channel) values ($1,$1,'LINE') returning id`, [name]);
@@ -294,7 +297,7 @@ export async function receiveLineMessage(m: IncomingLine): Promise<{ status: "ne
     await c.query(`update clients set last_contact_at = now() where id = $1`, [ct.client_id]);
     const [job] = await rows<{ id: string }>(c, `select id from jobs where client_id = $1 order by created_at desc limit 1`, [ct.client_id]);
     await emit(c, "message.received", { jobId: job?.id, actor: "client", source: "system", after: "line" });
-    return { status: "new" as const, clientId: ct.client_id };
+    return { status: "new" as const, clientId: ct.client_id, firstContact };
   });
 }
 
@@ -459,8 +462,14 @@ export async function processSlip(slipId: string): Promise<{ outcome: "approved"
   });
 }
 
+/** Claude อ่านแล้วว่ารูปนี้ไม่ใช่สลิป (เช่น ลูกค้าส่งรูปร้านตอนมีใบค้าง) → ปิดสลิปนี้เงียบๆ · คืน true ให้ผู้เรียกเก็บเป็นรูปลูกค้าแทน */
+export async function dropIfNotSlip(slipId: string) {
+  const r = await q(`update slips set status = 'rejected', decided_by = 'auto', verified_by = 'auto' where id = $1 and status = 'pending' and (read->>'is_transfer_slip') = 'false' returning id`, [slipId]);
+  return r.length > 0;
+}
+
 /** ข้อความจากระบบถึงลูกค้า (เช่น แจ้งผลสลิป) · ไม่เปลี่ยนสถานะอ่านแล้วของแชท */
-export async function sendSystemMessage(clientId: string, text: string, quick?: QuickItem[]) {
+export async function sendSystemMessage(clientId: string, text: string, quick?: QuickItem[], image?: string) {
   const to = await lineUserIdOf(clientId);
   const taskId = await tx(async (c) => {
     const [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [clientId]);
@@ -468,7 +477,7 @@ export async function sendSystemMessage(clientId: string, text: string, quick?: 
     const [m] = await rows<{ id: string }>(c, `insert into messages (conversation_id, sender, body, read_at, delivery) values ($1,'system',$2,now(),$3) returning id::text`, [cv.id, text, to ? "pending" : "none"]);
     if (!to) return null;
     const [t] = await rows<{ id: string }>(c, `insert into tasks (name, idempotency_key, payload) values ('line.push · แจ้งลูกค้า', $1, $2) returning id::text`,
-      [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID(), quick })]);
+      [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID(), quick, image })]);
     return t.id;
   });
   if (taskId) await runLinePush(taskId);
@@ -481,6 +490,8 @@ export const hasOpenInvoice = async (clientId: string) =>
 export async function notifySlipResult(slipId: string, outcome: "approved" | "review" | "rejected") {
   const s = await one<{ client_id: string | null; doc_no: string | null; amount: number | null; doc_status: string | null; left: number | null }>(`select coalesce(s.client_id, d.client_id) client_id, s.doc_no, s.amount_satang::int amount,
     d.status doc_status, (d.total_satang - d.paid_satang)::int "left" from slips s left join documents d on d.no = s.doc_no where s.id = $1`, [slipId]);
+  if (outcome === "approved" && s?.doc_no && s.amount) await notify({ type: "payment.received", docNo: s.doc_no, amount: s.amount });
+  if (outcome === "review") await notify({ type: "slip.needs_review", slipId });
   if (!s?.client_id) return;
   if (outcome === "review") return sendSystemMessage(s.client_id, "ได้รับสลิปแล้วค่ะ ทีมงานกำลังตรวจสอบ แล้วจะแจ้งผลในแชทนี้");
   if (outcome === "rejected") return sendSystemMessage(s.client_id, "ขออภัยค่ะ สลิปที่ส่งมายืนยันการชำระไม่ได้ ทีมงานจะทักกลับเพื่อแจ้งรายละเอียด");
@@ -490,5 +501,5 @@ export async function notifySlipResult(slipId: string, outcome: "approved" | "re
   await sendSystemMessage(s.client_id, `ได้รับชำระ ${baht(s.amount)} บาท สำหรับ ${s.doc_no} เรียบร้อยแล้ว ขอบคุณค่ะ 🙏${rc ? ` (ใบเสร็จ ${rc.no})` : s.left ? ` · ยอดคงเหลือ ${baht(s.left)} บาท` : ""}`);
 }
 
-export const clientFiles = (clientId: string) => q<{ id: string; mime: string; at: string }>(`select id::text, mime, created_at::text at from client_files where client_id = $1 order by id desc limit 30`, [clientId]);
+export const clientFiles = (clientId: string) => q<{ id: string; mime: string; at: string; kind: string }>(`select id::text, mime, created_at::text at, kind from client_files where client_id = $1 order by id desc limit 30`, [clientId]);
 export const clientFile = (id: string) => one<{ mime: string; bytes: Buffer; clientId: string }>(`select mime, bytes, client_id "clientId" from client_files where id = $1`, [id]);

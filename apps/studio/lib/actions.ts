@@ -6,6 +6,8 @@ import { requireStaff } from "./auth";
 import { validateBlock, runChecks, TEMPLATES } from "./blocks";
 import type { Stage, Actor } from "./workflow";
 import type { DocType } from "./money";
+import { sendForReview } from "./order-chat";
+import { draftForJob } from "./draft";
 
 const withErr = (p: string, err?: string) => (err ? `${p}${p.includes("?") ? "&" : "?"}err=${encodeURIComponent(err)}` : p);
 // แปลง error จาก DB (เช่น trigger) ให้อ่านได้ · redirect อยู่นอก try เพราะ Next ใช้ throw
@@ -19,7 +21,19 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const satang = (f: FormData, k: string) => Math.round(Number(f.get(k)) * 100);
 
 export async function moveJobAction(f: FormData) { const me = await requireStaff("clients.edit");
-  await run(str(f, "back") || "/", () => S.moveJob(str(f, "job"), str(f, "to") as Stage, str(f, "by") as Actor, str(f, "reason")));
+  const job = str(f, "job"), to = str(f, "to") as Stage;
+  await run(str(f, "back") || "/", async () => {
+    await S.moveJob(job, to, str(f, "by") as Actor, str(f, "reason"));
+    // ส่งงานให้ลูกค้าตรวจ → ส่งลิงก์ตัวอย่างพร้อมปุ่มอนุมัติ/ขอแก้เข้าแชท LINE
+    if (to === "client_review") { const j = await S.getJob(job); if (j) await sendForReview(j.clientId).catch((e) => console.error("sendForReview", e)); }
+  });
+}
+export async function draftSiteAction(f: FormData) { const me = await requireStaff("sites.edit");
+  const job = str(f, "job");
+  let site = "", err: string | undefined;
+  try { site = (await draftForJob(job, { by: me.name, force: true })).siteId; } catch (e) { err = (e as Error).message; }
+  revalidatePath("/", "layout");
+  redirect(err ? withErr(`/builder?job=${job}`, err) : `/builder?site=${site}`);
 }
 export async function addClientAction(f: FormData) { const me = await requireStaff("clients.edit");
   const name = str(f, "name");

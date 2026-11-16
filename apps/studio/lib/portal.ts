@@ -1,4 +1,6 @@
 import "server-only";
+import { notify } from "./notify";
+import { isEmail } from "./email";
 import { createHash, randomBytes } from "node:crypto";
 import { q, one, tx } from "./db";
 import * as S from "./store";
@@ -46,10 +48,19 @@ export async function resolvePortal(token: string): Promise<Resolved> {
   if (!l) return { status: "invalid" };
   if (l.revoked || !l.live) return { status: "expired", clientId: l.client_id, jobId: l.job_id };
   await q(`update portal_links set last_seen_at = now() where token_hash = $1`, [sha(token)]);
-  const client = (await one<PortalCtx["client"]>(`select name, phone, opening_hours "openingHours", customer_type "customerType", legal_name "legalName", tax_id "taxId", branch, address, po_no "poNo", wht, package pkg from clients where id = $1`, [l.client_id]))!;
-  const job = (await one<PortalCtx["job"] & { siteId: string | null }>(`select stage, edit_rounds "editRounds", edit_requests "editRequests", pdpa_consent pdpa, site_id "siteId" from jobs where id = $1`, [l.job_id]))!;
+  return { status: "ok", ctx: await loadCtx(l.client_id, l.job_id, token, l.expires_at) };
+}
+async function loadCtx(clientId: string, jobId: string, token: string, expiresAt: string): Promise<PortalCtx> {
+  const client = (await one<PortalCtx["client"]>(`select name, phone, opening_hours "openingHours", customer_type "customerType", legal_name "legalName", tax_id "taxId", branch, address, po_no "poNo", wht, package pkg from clients where id = $1`, [clientId]))!;
+  const job = (await one<PortalCtx["job"] & { siteId: string | null }>(`select stage, edit_rounds "editRounds", edit_requests "editRequests", pdpa_consent pdpa, site_id "siteId" from jobs where id = $1`, [jobId]))!;
   const site = job.siteId ? (await one<NonNullable<PortalCtx["site"]>>(`select domain, version, config, status from sites where id = $1`, [job.siteId])) ?? null : null;
-  return { status: "ok", ctx: { token, clientId: l.client_id, jobId: l.job_id, expiresAt: l.expires_at, client, job, site } };
+  return { token, clientId, jobId, expiresAt, client, job, site };
+}
+/** บริบทงานล่าสุดของลูกค้า สำหรับคำสั่งที่มาจากแชท LINE (ยืนยันตัวด้วย LINE userId แล้ว ไม่ต้องใช้ลิงก์) */
+export async function ctxForClient(clientId: string): Promise<(PortalCtx & { siteId: string | null }) | null> {
+  const j = await one<{ id: string; site_id: string | null }>(`select id, site_id from jobs where client_id = $1 order by created_at desc limit 1`, [clientId]);
+  if (!j) return null;
+  return { ...(await loadCtx(clientId, j.id, "", "")), siteId: j.site_id };
 }
 
 /** ลิงก์หมดอายุ → ส่งลิงก์ใหม่ไปที่ LINE ที่ลงทะเบียนไว้เท่านั้น · จำกัด 1 ครั้งต่อ 10 นาที */
@@ -64,12 +75,14 @@ export async function requestNewLink(oldToken: string): Promise<"sent" | "no-lin
 }
 
 // ---------- ขั้นที่ 1: ข้อมูลร้าน ----------
-export interface IntakeForm { name: string; phone: string; hours: string; customerType: string; pdpa: boolean; legalName?: string; taxId?: string; branch?: string; address?: string; poNo?: string; wht?: boolean }
+export interface IntakeForm { name: string; phone: string; email?: string; hours: string; customerType: string; pdpa: boolean; legalName?: string; taxId?: string; branch?: string; address?: string; poNo?: string; wht?: boolean }
 export async function submitIntake(ctx: PortalCtx, f: IntakeForm, files: { mime: string; bytes: Buffer }[]) {
   if (!["new_chat", "intake"].includes(ctx.job.stage)) throw new Error("ส่งข้อมูลไปแล้ว ทีมงานกำลังทำเว็บ");
   if (!f.pdpa) throw new Error("ต้องยินยอมให้ใช้ข้อมูลก่อนส่ง");
   if (!f.name.trim()) throw new Error("ต้องใส่ชื่อร้าน");
   if (f.phone && !validThaiPhone(f.phone)) throw new Error("เบอร์โทรไม่ถูกต้อง");
+  const email = f.email?.trim().toLowerCase() ?? "";
+  if (email && !isEmail(email)) throw new Error("อีเมลไม่ถูกต้อง");
   if (!["person", "company", "government", "foreigner"].includes(f.customerType)) throw new Error("ประเภทลูกค้าไม่ถูกต้อง");
   const company = f.customerType === "company" || f.customerType === "government";
   if (company) {
@@ -84,6 +97,10 @@ export async function submitIntake(ctx: PortalCtx, f: IntakeForm, files: { mime:
       [ctx.clientId, f.name.trim(), f.phone.replace(/[\s-]/g, ""), f.hours.trim(), f.customerType,
        company ? f.legalName!.trim() : null, company ? f.taxId!.replace(/\D/g, "") : null, company ? (f.branch || "สำนักงานใหญ่") : null,
        company ? f.address!.trim() : null, company ? (f.poNo?.trim() || null) : null, company ? !!f.wht : false]);
+    if (email) {
+      await c.query(`delete from contacts where client_id = $1 and channel = 'Email'`, [ctx.clientId]);
+      await c.query(`insert into contacts (client_id, channel, value, name) values ($1,'Email',$2,$2) on conflict (channel, value) do update set client_id = excluded.client_id`, [ctx.clientId, email]);
+    }
     for (const file of files) await c.query(`insert into client_files (client_id, mime, bytes) values ($1,$2,$3)`, [ctx.clientId, file.mime, file.bytes]);
     const complete = Boolean(f.name.trim() && f.phone && f.hours.trim());
     await c.query(`update jobs set pdpa_consent = true, checklist_done = $2 where id = $1`, [ctx.jobId, complete]);
@@ -92,6 +109,7 @@ export async function submitIntake(ctx: PortalCtx, f: IntakeForm, files: { mime:
   if (ctx.job.stage === "new_chat") await S.moveJob(ctx.jobId, "intake", "system");
   const j = await one<{ checklist_done: boolean }>(`select checklist_done from jobs where id = $1`, [ctx.jobId]);
   if (j?.checklist_done) await S.moveJob(ctx.jobId, "template", "system");
+  await notify({ type: "portal.intake", clientId: ctx.clientId });
 }
 
 // ---------- ขั้นที่ 2: ตรวจเว็บ ----------
@@ -99,11 +117,18 @@ export async function approveSite(ctx: PortalCtx) {
   if (ctx.job.stage === "invoice" || ctx.job.stage === "payment") return; // อนุมัติไปแล้ว
   if (ctx.job.stage !== "client_review") throw new Error("ตอนนี้ยังไม่มีเว็บให้อนุมัติ");
   await S.moveJob(ctx.jobId, "invoice", "client");
+  await notify({ type: "portal.approved", clientId: ctx.clientId });
   // ออกใบแจ้งหนี้จากแคตตาล็อกตามแพ็กเกจทันที (ล็อกราคา ณ ตอนออก) · ไม่มีแพ็กเกจ = รอทีมออกใบเอง
   const item = ctx.client.pkg ? PACKAGE_ITEM[ctx.client.pkg] : undefined;
   const price = item ? await one<{ price: number }>(`select price_satang::int price from catalog_items where code = $1 and active`, [item]) : undefined;
-  if (price && !(await one(`select 1 from documents where job_id = $1 and type = 'INV' and status <> 'voided' and total_satang = $2`, [ctx.jobId, price.price]))) {
-    await S.issueDoc("INV", ctx.clientId, price.price, ctx.jobId);
+  if (price) {
+    // หักมัดจำที่จ่ายแล้ว · มัดจำที่ยังไม่จ่ายให้ยกเลิก แล้วเก็บเต็มในใบนี้
+    const dep = await one<{ no: string; status: string; paid: number }>(`select d.no, d.status, d.paid_satang::int paid from jobs j join documents d on d.no = j.deposit_doc where j.id = $1`, [ctx.jobId]);
+    if (dep?.status === "issued" && dep.paid === 0) await S.voidDoc(dep.no);
+    const due = price.price - (dep?.paid ?? 0);
+    if (due > 0 && !(await one(`select 1 from documents where job_id = $1 and type = 'INV' and status <> 'voided' and total_satang = $2 and no is distinct from $3`, [ctx.jobId, due, dep?.no ?? null]))) {
+      await S.issueDoc("INV", ctx.clientId, due, ctx.jobId);
+    }
   }
   // ทำซ้ำได้ (กดซ้ำ/ส่งซ้ำ) · เดินขั้นเฉพาะตอนยังอยู่ที่ "ออกใบ"
   const now = await one<{ stage: string }>(`select stage from jobs where id = $1`, [ctx.jobId]);
@@ -118,6 +143,7 @@ async function recordRequest(ctx: PortalCtx, text: string, paid: boolean) {
   // ให้ทีมเห็นในกล่องข้อความ
   await q(`insert into messages (conversation_id, sender, body) select id, 'client', $2 from conversations where client_id = $1`, [ctx.clientId, `[ขอแก้รอบ ${round}${paid ? " · ชำระเพิ่ม" : ""}] ${text}`]);
   await S.moveJob(ctx.jobId, "template", "client");
+  await notify({ type: "portal.edit", clientId: ctx.clientId, text });
 }
 export async function requestEdit(ctx: PortalCtx, text: string): Promise<"sent" | "needs-payment"> {
   if (ctx.job.stage !== "client_review") throw new Error("ตอนนี้ยังขอแก้ไม่ได้");

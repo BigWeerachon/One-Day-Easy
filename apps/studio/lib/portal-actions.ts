@@ -1,5 +1,9 @@
 "use server";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { one } from "./db";
+import { aiConfigured } from "./ai";
+import { draftForJob } from "./draft";
 import { revalidatePath } from "next/cache";
 import * as P from "./portal";
 
@@ -59,16 +63,26 @@ export async function intakeStateAction(_prev: IntakeState, f: FormData): Promis
   const token = s(f, "t");
   const r = await P.resolvePortal(token);
   if (r.status !== "ok") redirect(`/p/${encodeURIComponent(token)}`);
-  const values = Object.fromEntries(["name", "phone", "hours", "customerType", "legalName", "taxId", "branch", "branchNo", "address", "poNo"].map((k) => [k, s(f, k)]));
+  const values = Object.fromEntries(["name", "phone", "email", "hours", "customerType", "legalName", "taxId", "branch", "branchNo", "address", "poNo"].map((k) => [k, s(f, k)]));
   values.wht = f.get("wht") === "on" ? "1" : ""; values.pdpa = f.get("pdpa") === "on" ? "1" : "";
   try {
     await P.submitIntake(r.ctx, {
-      name: values.name, phone: values.phone, hours: values.hours, customerType: values.customerType, pdpa: !!values.pdpa,
+      name: values.name, phone: values.phone, email: values.email, hours: values.hours, customerType: values.customerType, pdpa: !!values.pdpa,
       legalName: values.legalName, taxId: values.taxId, branch: values.branch === "branch" ? `สาขา ${values.branchNo.trim()}` : "สำนักงานใหญ่",
       address: values.address, poNo: values.poNo, wht: !!values.wht,
     }, await images(f, "photos", 10));
   } catch (e) {
     return { error: (e as Error).message, values, nonce: Date.now() };
+  }
+  // ข้อมูลครบ (งานเข้าขั้น "เลือกเทมเพลต") → ให้ Claude ร่างเว็บฉบับแรกทันที ทีมแค่ตรวจแล้วส่ง
+  const jobId = r.ctx.jobId;
+  if ((process.env.AUTO_DRAFT ?? "on") !== "off" && aiConfigured()) {
+    after(async () => {
+      try {
+        const j = await one<{ stage: string; site_id: string | null }>(`select stage, site_id from jobs where id = $1`, [jobId]);
+        if (j?.stage === "template" && !j.site_id) { await draftForJob(jobId); revalidatePath("/", "layout"); }
+      } catch (e) { console.error("auto draft", e); }
+    });
   }
   revalidatePath(`/p/${token}`);
   redirect(`/p/${token}?ok=intake`);

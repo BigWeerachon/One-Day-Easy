@@ -6,6 +6,7 @@ import {
   type Hours, type Closure, type Busy, type Service, type Rules, type Slot, type BookingStatus,
 } from "./booking-rules";
 import { sendSystemMessage } from "./store";
+import { notify } from "./notify";
 
 type Db = Pick<PoolClient, "query">;
 const rows = async <T>(c: Db, sql: string, p: unknown[] = []) => (await c.query(sql, p)).rows as T[];
@@ -179,6 +180,8 @@ export async function createBooking(n: NewBooking): Promise<Booking> {
     await logEv(c, r[0].id, null, n.status, n.by, n.note);
     return r[0].id;
   });
+  // คิวที่กันไว้รอยืนยัน (held) ยังไม่แจ้ง · แจ้งตอนยืนยัน
+  if (n.status !== "held") await notify({ type: "booking.created", bookingId: id });
   return (await getBooking(id))!;
 }
 
@@ -204,7 +207,10 @@ export async function setStatus(id: string, to: BookingStatus, by: string, note?
     await logEv(c, id, b.status, to, by, note);
   };
   if (db) { await run(db); return undefined as unknown as Booking; } // อยู่ใน tx ของผู้เรียก · ยังไม่ commit
+  const before = await one<{ status: BookingStatus }>(`select status from bookings where id = $1`, [id]);
   await tx(run);
+  if (before?.status === "held" && to === "confirmed") await notify({ type: "booking.created", bookingId: id });
+  if (before && before.status !== "held" && to === "cancelled") await notify({ type: "booking.cancelled", bookingId: id, reason: note, by });
   return (await getBooking(id))!;
 }
 
