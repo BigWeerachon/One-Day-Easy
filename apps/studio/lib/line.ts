@@ -23,7 +23,7 @@ export interface QuickItem { label: string; data: string; display?: string }
 export const quickReply = (items: QuickItem[]) => ({
   items: items.slice(0, 13).map((i) => ({ type: "action", action: { type: "postback", label: [...i.label].slice(0, 20).join(""), data: i.data.slice(0, 300), displayText: (i.display ?? i.label).slice(0, 300) } })),
 });
-export async function pushText(to: string, text: string, retryKey: string, quick?: QuickItem[]) {
+export async function pushText(to: string, text: string, retryKey: string, quick?: QuickItem[], imageUrl?: string) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token) throw new LineError("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN", 0, false);
   let res: Response;
@@ -31,7 +31,11 @@ export async function pushText(to: string, text: string, retryKey: string, quick
     res = await fetch(`${base()}/v2/bot/message/push`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Line-Retry-Key": retryKey },
-      body: JSON.stringify({ to, messages: [{ type: "text", text: text.slice(0, 5000), ...(quick?.length ? { quickReply: quickReply(quick) } : {}) }] }),
+      body: JSON.stringify({ to, messages: [
+        // รูป (เช่น QR พร้อมเพย์) ต้องเป็น https ที่ LINE เปิดได้ · ข้อความพร้อมปุ่มอยู่ท้ายสุด
+        ...(imageUrl ? [{ type: "image", originalContentUrl: imageUrl, previewImageUrl: imageUrl }] : []),
+        { type: "text", text: text.slice(0, 5000), ...(quick?.length ? { quickReply: quickReply(quick) } : {}) },
+      ] }),
       signal: AbortSignal.timeout(10_000),
     });
   } catch (e) {

@@ -22,7 +22,7 @@ const env = {
   LINE_API_BASE: `http://127.0.0.1:${P.line}`, LINE_DATA_API_BASE: `http://127.0.0.1:${P.line}`,
   ANTHROPIC_API_KEY: "e2e-anthropic-key", ANTHROPIC_BASE_URL: `http://127.0.0.1:${P.claude}`,
   VERCEL_TOKEN: "vtok", VERCEL_TEAM_ID: "team_e2e", ENGINE_PROJECT_ID: "engine-e2e", VERCEL_API_BASE: `http://127.0.0.1:${P.vercel}`, PLATFORM_DOMAIN: "onedayeasy.app",
-  DOMAIN_SSL_PROBE: "off",
+  DOMAIN_SSL_PROBE: "off", LINE_ALLOW_HTTP_IMAGES: "1", ORDER_DEPOSIT_PERCENT: "50",
   RESEND_API_KEY: "e2e-resend-key", EMAIL_FROM: "Studio <noti@e2e.test>", EMAIL_API_BASE: `http://127.0.0.1:${P.email}`,
   PROMPTPAY_ID: "0812345678", SHOP_RECEIVER_NAMES: "บจก. วันเดย์ อีซี่", SHOP_RECEIVER_ACCOUNTS: "123-4-56789-0", SLIP_AUTO_APPROVE: "on", SLIP_MAX_AGE_DAYS: "3",
   SELLER_NAME: "บริษัท วันเดย์ อีซี่ จำกัด", SELLER_TAX_ID: "0105555555555",

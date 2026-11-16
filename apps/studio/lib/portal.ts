@@ -48,10 +48,19 @@ export async function resolvePortal(token: string): Promise<Resolved> {
   if (!l) return { status: "invalid" };
   if (l.revoked || !l.live) return { status: "expired", clientId: l.client_id, jobId: l.job_id };
   await q(`update portal_links set last_seen_at = now() where token_hash = $1`, [sha(token)]);
-  const client = (await one<PortalCtx["client"]>(`select name, phone, opening_hours "openingHours", customer_type "customerType", legal_name "legalName", tax_id "taxId", branch, address, po_no "poNo", wht, package pkg from clients where id = $1`, [l.client_id]))!;
-  const job = (await one<PortalCtx["job"] & { siteId: string | null }>(`select stage, edit_rounds "editRounds", edit_requests "editRequests", pdpa_consent pdpa, site_id "siteId" from jobs where id = $1`, [l.job_id]))!;
+  return { status: "ok", ctx: await loadCtx(l.client_id, l.job_id, token, l.expires_at) };
+}
+async function loadCtx(clientId: string, jobId: string, token: string, expiresAt: string): Promise<PortalCtx> {
+  const client = (await one<PortalCtx["client"]>(`select name, phone, opening_hours "openingHours", customer_type "customerType", legal_name "legalName", tax_id "taxId", branch, address, po_no "poNo", wht, package pkg from clients where id = $1`, [clientId]))!;
+  const job = (await one<PortalCtx["job"] & { siteId: string | null }>(`select stage, edit_rounds "editRounds", edit_requests "editRequests", pdpa_consent pdpa, site_id "siteId" from jobs where id = $1`, [jobId]))!;
   const site = job.siteId ? (await one<NonNullable<PortalCtx["site"]>>(`select domain, version, config, status from sites where id = $1`, [job.siteId])) ?? null : null;
-  return { status: "ok", ctx: { token, clientId: l.client_id, jobId: l.job_id, expiresAt: l.expires_at, client, job, site } };
+  return { token, clientId, jobId, expiresAt, client, job, site };
+}
+/** บริบทงานล่าสุดของลูกค้า สำหรับคำสั่งที่มาจากแชท LINE (ยืนยันตัวด้วย LINE userId แล้ว ไม่ต้องใช้ลิงก์) */
+export async function ctxForClient(clientId: string): Promise<(PortalCtx & { siteId: string | null }) | null> {
+  const j = await one<{ id: string; site_id: string | null }>(`select id, site_id from jobs where client_id = $1 order by created_at desc limit 1`, [clientId]);
+  if (!j) return null;
+  return { ...(await loadCtx(clientId, j.id, "", "")), siteId: j.site_id };
 }
 
 /** ลิงก์หมดอายุ → ส่งลิงก์ใหม่ไปที่ LINE ที่ลงทะเบียนไว้เท่านั้น · จำกัด 1 ครั้งต่อ 10 นาที */
@@ -112,8 +121,14 @@ export async function approveSite(ctx: PortalCtx) {
   // ออกใบแจ้งหนี้จากแคตตาล็อกตามแพ็กเกจทันที (ล็อกราคา ณ ตอนออก) · ไม่มีแพ็กเกจ = รอทีมออกใบเอง
   const item = ctx.client.pkg ? PACKAGE_ITEM[ctx.client.pkg] : undefined;
   const price = item ? await one<{ price: number }>(`select price_satang::int price from catalog_items where code = $1 and active`, [item]) : undefined;
-  if (price && !(await one(`select 1 from documents where job_id = $1 and type = 'INV' and status <> 'voided' and total_satang = $2`, [ctx.jobId, price.price]))) {
-    await S.issueDoc("INV", ctx.clientId, price.price, ctx.jobId);
+  if (price) {
+    // หักมัดจำที่จ่ายแล้ว · มัดจำที่ยังไม่จ่ายให้ยกเลิก แล้วเก็บเต็มในใบนี้
+    const dep = await one<{ no: string; status: string; paid: number }>(`select d.no, d.status, d.paid_satang::int paid from jobs j join documents d on d.no = j.deposit_doc where j.id = $1`, [ctx.jobId]);
+    if (dep?.status === "issued" && dep.paid === 0) await S.voidDoc(dep.no);
+    const due = price.price - (dep?.paid ?? 0);
+    if (due > 0 && !(await one(`select 1 from documents where job_id = $1 and type = 'INV' and status <> 'voided' and total_satang = $2 and no is distinct from $3`, [ctx.jobId, due, dep?.no ?? null]))) {
+      await S.issueDoc("INV", ctx.clientId, due, ctx.jobId);
+    }
   }
   // ทำซ้ำได้ (กดซ้ำ/ส่งซ้ำ) · เดินขั้นเฉพาะตอนยังอยู่ที่ "ออกใบ"
   const now = await one<{ stage: string }>(`select stage from jobs where id = $1`, [ctx.jobId]);

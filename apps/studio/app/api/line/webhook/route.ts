@@ -1,8 +1,9 @@
 import { after } from "next/server";
 import { verifySignature, getProfileName, describeMessage, downloadContent, type LineEvent } from "@/lib/line";
-import { receiveLineMessage, hasOpenInvoice, createSlipFromImage, processSlip, notifySlipResult } from "@/lib/store";
+import { receiveLineMessage, hasOpenInvoice, createSlipFromImage, processSlip, notifySlipResult, dropIfNotSlip } from "@/lib/store";
 import { revalidatePath } from "next/cache";
 import { handleBookingText, handleBookingPostback } from "@/lib/booking-chat";
+import { handleOrderText, handleOrderPostback, onImageSaved } from "@/lib/order-chat";
 import { q } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -30,8 +31,10 @@ export async function POST(req: Request) {
       // กัน LINE ส่ง event ซ้ำ (redelivery)
       if (eventId && !(await q(`insert into line_booking_sessions (line_user_id, state) values ($1, '{}') on conflict do nothing returning 1`, [`ev:${eventId}`])).length) continue;
       after(async () => {
-        try { await handleBookingPostback(ct.client_id, userId, data, ct.name); revalidatePath("/", "layout"); }
-        catch (e) { console.error("booking postback", e); }
+        try {
+          if (!(await handleOrderPostback(ct.client_id, userId, data))) await handleBookingPostback(ct.client_id, userId, data, ct.name);
+          revalidatePath("/", "layout");
+        } catch (e) { console.error("line postback", e); }
       });
       continue;
     }
@@ -47,30 +50,38 @@ export async function POST(req: Request) {
     saved++;
     // ข้อความเรื่องคิว (จอง/ว่างไหม/ยกเลิก/เลื่อน) → บอทตอบเอง · ไม่ใช่เรื่องคิว → รอทีมตอบตามปกติ
     if (ev.message.type === "text" && ev.message.text) {
-      const userId = ev.source.userId, text = ev.message.text, messageId = ev.message.id, clientId = r.clientId;
+      const userId = ev.source.userId, text = ev.message.text, messageId = ev.message.id, clientId = r.clientId, first = !!r.firstContact;
       after(async () => {
         try {
           const name = (await q<{ name: string }>(`select name from clients where id = $1`, [clientId]))[0]?.name ?? "ลูกค้า LINE";
-          if (await handleBookingText(clientId, userId, text, name)) {
+          // เรื่องคิวมาก่อน · ไม่ใช่ → เรื่องสั่งทำเว็บ (เมนูแพ็ก/สถานะ/ข้อความขอแก้) · ลูกค้าใหม่ได้ข้อความต้อนรับแต่ยังค้างในกล่องข้อความให้ทีมเห็น
+          const handled = (await handleBookingText(clientId, userId, text, name)) || ((await handleOrderText(clientId, userId, text, first)) && !first);
+          if (handled) {
             await q(`update messages set read_at = now() where external_id = $1 and read_at is null`, [`line:${messageId}`]);
             revalidatePath("/", "layout");
           }
         } catch (e) { console.error("booking chat", e); }
       });
     }
-    // รูปจากลูกค้าที่มีใบค้างชำระ = อาจเป็นสลิป → ตรวจหลังตอบ LINE แล้ว (LINE ต้องการคำตอบเร็ว)
-    if (ev.message.type === "image" && (await hasOpenInvoice(r.clientId))) {
-      const messageId = ev.message.id, clientId = r.clientId;
+    // รูป: ลูกค้ามีใบค้างชำระ = ลองอ่านเป็นสลิปก่อน · ไม่ใช่สลิป หรือไม่มีใบค้าง = เก็บเป็นรูปของลูกค้า (รูปร้าน/ภาพ ref)
+    if (ev.message.type === "image") {
+      const messageId = ev.message.id, clientId = r.clientId, userId = ev.source.userId;
+      const maybeSlip = await hasOpenInvoice(clientId);
       after(async () => {
         try {
           const img = await downloadContent(messageId);
           const mime = IMAGE_MIME.find((m) => m === img.mime) ?? "image/jpeg";
-          const slipId = await createSlipFromImage({ clientId, source: "line", lineMessageId: messageId, bytes: img.bytes, mime });
-          if (!slipId) return;
-          const res = await processSlip(slipId);
-          await notifySlipResult(slipId, res.outcome);
+          if (maybeSlip) {
+            const slipId = await createSlipFromImage({ clientId, source: "line", lineMessageId: messageId, bytes: img.bytes, mime });
+            if (!slipId) return;
+            const res = await processSlip(slipId);
+            if (!(await dropIfNotSlip(slipId))) { await notifySlipResult(slipId, res.outcome); revalidatePath("/", "layout"); return; }
+          }
+          if (img.bytes.length > 5 * 1024 * 1024) return;
+          const ins = await q(`insert into client_files (client_id, kind, mime, bytes, source, line_message_id, tagged) values ($1,'photo',$2,$3,'line',$4,false) on conflict (line_message_id) do nothing returning id`, [clientId, mime, img.bytes, messageId]);
+          if (ins.length) await onImageSaved(clientId, userId, maybeSlip);
           revalidatePath("/", "layout");
-        } catch (e) { console.error("slip pipeline", e); }
+        } catch (e) { console.error("line image", e); }
       });
     }
   }

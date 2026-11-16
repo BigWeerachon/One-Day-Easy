@@ -56,6 +56,22 @@ export function claudeMock() {
       return json(res, 200, msg(JSON.stringify(out)));
     }
     if (s.mode === "refusal") return json(res, 200, msg("", "refusal"));
+    if (sys.includes("ร่างเว็บไซต์ฉบับแรก")) {
+      // ร่างทั้งเว็บ: ใช้รหัสรูปที่ได้รับจริง · มีภาพ ref = คืนสีหลัก · ใส่บล็อกผิด schema 1 อัน และรูปที่ไม่ใช่ของลูกค้า 1 อัน เพื่อทดสอบการคัดออก
+      const parts = body.messages?.[0]?.content ?? [];
+      const ids = parts.filter((c) => c.type === "text").map((c) => c.text.match(/file:(\d+)/)?.[0]).filter(Boolean);
+      const hasRef = parts.some((c) => c.type === "text" && c.text.includes("ภาพ ref"));
+      const shop = JSON.parse((parts.at(-1).text.match(/<shop>(.*?)<\/shop>/s) ?? [])[1] ?? "{}");
+      const ops = [
+        { block: "hero", data_json: JSON.stringify({ title: `${shop.name ?? "ร้าน"} อร่อยทุกวัน`.slice(0, 48), subtitle: "อาหารทำสดใหม่ สั่งง่ายทาง LINE", cta: "สั่งเลย", ...(ids[0] ? { image: ids[0] } : {}) }) },
+        { block: "menu", data_json: JSON.stringify({ items: (shop.menu_or_products?.length ? shop.menu_or_products : [{ name: "เมนูแนะนำ", price: 0 }]).map((m) => ({ name: m.name, price: m.price ?? 0 })) }) },
+        ...(shop.opening_hours ? [{ block: "hours", data_json: JSON.stringify({ days: "ทุกวัน", open: "06:00", close: "22:00" }) }] : []),
+        ...(shop.address ? [{ block: "map", data_json: JSON.stringify({ address: shop.address }) }] : []),
+        { block: "faq", data_json: JSON.stringify({ items: [{ q: "x".repeat(200), a: "ยาวเกิน schema" }] }) },
+        { block: "reviews", data_json: JSON.stringify({ rating: 5, count: 1, items: [{ img: "file:999999" }] }) },
+      ];
+      return json(res, 200, msg(JSON.stringify({ summary: "ร่างหน้าแรก เมนู และข้อมูลติดต่อ · ยังขาด LINE ID", theme_primary: hasRef ? "#1f6f54" : null, ops })));
+    }
     if (sys.includes("สรุปข้อมูลที่ใช้สร้างเว็บ")) return json(res, 200, msg(JSON.stringify({ business_name: "ร้านกาแฟสมชาย", business_type: "คาเฟ่", contact_name: "คุณสมชาย", phone: null, line_id: null, address: null, opening_hours: null,
       products: [{ name: "ลาเต้", price: 65 }], style_notes: ["ชอบโทนไม้อบอุ่น"], suggested_template: "T1", missing: ["เวลาเปิด-ปิด", "ที่อยู่ร้าน"] })));
     const ops = s.mode === "invalid"

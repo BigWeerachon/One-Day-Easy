@@ -20,10 +20,18 @@ after(closeDb);
 // ผู้ให้บริการแยกสำหรับเทสต์ที่ใช้เวลา "ตอนนี้" · กันชนกับคิวตัวอย่างใน seed ไม่ว่ารันตอนกี่โมง
 const freeResource = async () => (await sql(`insert into booking_resources (name) values ('e2e-' || gen_random_uuid()) returning id`))[0].id;
 
-test("ข้อความทั่วไป → บอทไม่ตอบ และยังอยู่ในกล่องข้อความ (ยังไม่อ่าน)", async () => {
+test("ลูกค้าใหม่ทักครั้งแรก → ได้เมนูแพ็กเกจ 1 ครั้ง และข้อความยังค้างในกล่องข้อความให้ทีมเห็น", async () => {
+  const p = await waitFor(async () => { const x = await linePushes(U); return x.length ? x : null; });
+  assert.equal(p.length, 1);
+  assert.match(p[0].text, /แพ็กเกจทำเว็บ/);
+  assert.equal(await val(`select count(*)::int from messages m join conversations c on c.id = m.conversation_id join contacts ct on ct.client_id = c.client_id where ct.value = $1 and m.sender = 'client' and m.read_at is null`, [U]), 1);
+  await waitFor(async () => (await linePushes(U2)).length === 1);
+});
+
+test("ข้อความทั่วไปครั้งถัดไป → บอทไม่ตอบ", async () => {
+  await lineText(U, "ขอบคุณค่ะ");
   await new Promise((r) => setTimeout(r, 800));
-  assert.equal((await linePushes(U)).length, 0);
-  assert.equal(await val(`select count(*)::int from messages m join conversations c on c.id = m.conversation_id join contacts ct on ct.client_id = c.client_id where ct.value = $1 and m.read_at is null`, [U]), 1);
+  assert.equal((await linePushes(U)).length, 1);
 });
 
 test("หลายบริการ ไม่ระบุ → ถามบริการพร้อมปุ่ม", async () => {

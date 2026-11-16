@@ -1,7 +1,7 @@
 // การเงิน: สลิปทาง LINE อนุมัติอัตโนมัติ → ใบเสร็จ · ref ซ้ำ → รอคนตรวจ · ไม่ใช่สลิป · อัปโหลด · ออกเอกสาร · PDF
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { URLS, resetDb, closeDb, closeBrowser, loginAs, act, lineImage, linePushes, mockPost, sql, val, waitFor, errorText } from "./lib.mjs";
+import { URLS, resetDb, closeDb, closeBrowser, loginAs, act, lineImage, linePostback, linePushes, mockPost, sql, val, waitFor, errorText } from "./lib.mjs";
 import { PNG } from "../mocks/mocks.mjs";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,11 +45,16 @@ test("เลขอ้างอิงซ้ำ → ไม่อนุมัติ
   assert.ok(s.checks.some((c) => !c.ok && /ซ้ำ/.test(c.rule)), JSON.stringify(s.checks));
 });
 
-test("รูปที่ไม่ใช่สลิป → รอคนตรวจ", async () => {
+test("มีใบค้างแต่รูปไม่ใช่สลิป → เก็บเป็นรูปของลูกค้า ไม่ค้างในคิวสลิป · ลูกค้าบอกเองได้ว่าเป็นสลิป", async () => {
   await mockPost("claude", "/__slip", "notslip");
   await lineImage(U, "img-d");
-  const s = await settled("img-d");
-  assert.equal(s.status, "pending");
+  await waitFor(async () => (await val(`select count(*)::int from client_files where line_message_id = 'img-d'`)) === 1, { message: "ไม่ได้เก็บรูป" });
+  assert.equal(await val(`select status from slips where line_message_id = 'img-d'`), "rejected");
+  await waitFor(async () => (await linePushes(U)).some((m) => /รูปชุดนี้คืออะไร/.test(m.text) && m.quickReply.items.some((i) => i.action.data === "od:img:slip")), { message: "ไม่มีปุ่มสลิปโอนเงิน" });
+  await linePostback(U, "od:img:slip");
+  await waitFor(async () => (await val(`select count(*)::int from slips where client_id = $1 and status = 'pending' and line_message_id is null and source = 'line'`, [client])) === 1, { message: "ไม่ได้สร้างสลิปรอตรวจ" });
+  assert.equal(await val(`select count(*)::int from client_files where line_message_id = 'img-d'`), 0);
+  await sql(`update slips set status = 'rejected' where status = 'pending' and line_message_id is null and source = 'line'`);
 });
 
 test("อัปโหลดสลิปยอดผิดที่หน้าการเงิน → คนเลือกใบแล้วยืนยัน", async () => {

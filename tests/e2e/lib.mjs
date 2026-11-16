@@ -52,7 +52,7 @@ export const resetMocks = () => Promise.all(["line", "claude", "vercel", "email"
 export const emails = async (to) => (await mockLog("email")).filter((m) => !to || m.to.includes(to));
 /** ข้อความที่ระบบ push ไปหาลูกค้าทาง LINE (ล่าสุดอยู่ท้าย) */
 export async function linePushes(to) {
-  return (await mockLog("line")).filter((l) => l.url.includes("/message/push") && (!to || l.body.to === to)).map((l) => ({ ...l.body.messages[0], to: l.body.to, retryKey: l.retryKey }));
+  return (await mockLog("line")).filter((l) => l.url.includes("/message/push") && (!to || l.body.to === to)).map((l) => ({ ...l.body.messages.at(-1), image: l.body.messages.find((m) => m.type === "image")?.originalContentUrl ?? null, to: l.body.to, retryKey: l.retryKey }));
 }
 export const quick = (m) => m?.quickReply?.items.map((i) => i.action) ?? [];
 
