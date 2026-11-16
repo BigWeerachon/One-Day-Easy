@@ -4,10 +4,12 @@ import { receiveLineMessage, hasOpenInvoice, createSlipFromImage, processSlip, n
 import { revalidatePath } from "next/cache";
 import { handleBookingText, handleBookingPostback } from "@/lib/booking-chat";
 import { handleOrderText, handleOrderPostback, onImageSaved } from "@/lib/order-chat";
+import { salesAnswer } from "@/lib/agents";
 import { q } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // งานหลังตอบ LINE (อ่านสลิป · Agent ร่าง/ตรวจเว็บ) ใช้เวลาเป็นนาที
 
 const IMAGE_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
@@ -55,7 +57,9 @@ export async function POST(req: Request) {
         try {
           const name = (await q<{ name: string }>(`select name from clients where id = $1`, [clientId]))[0]?.name ?? "ลูกค้า LINE";
           // เรื่องคิวมาก่อน · ไม่ใช่ → เรื่องสั่งทำเว็บ (เมนูแพ็ก/สถานะ/ข้อความขอแก้) · ลูกค้าใหม่ได้ข้อความต้อนรับแต่ยังค้างในกล่องข้อความให้ทีมเห็น
-          const handled = (await handleBookingText(clientId, userId, text, name)) || ((await handleOrderText(clientId, userId, text, first)) && !first);
+          const bot = (await handleBookingText(clientId, userId, text, name)) || (await handleOrderText(clientId, userId, text, first));
+          // ปุ่มตอบไม่ได้ → Sales Agent ตอบจากข้อมูลร้าน หรือปล่อยให้ทีมตอบ (handoff) · ข้อความแรกของลูกค้าใหม่ค้างไว้ให้ทีมเห็นเสมอ
+          const handled = bot ? !first : await salesAnswer(clientId, text);
           if (handled) {
             await q(`update messages set read_at = now() where external_id = $1 and read_at is null`, [`line:${messageId}`]);
             revalidatePath("/", "layout");

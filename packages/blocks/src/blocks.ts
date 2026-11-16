@@ -60,7 +60,8 @@ export const TEMPLATES: Template[] = [
 // 6 checks before sending to client
 export function runChecks(template: Template, config: Record<string, unknown>) {
   const present = (b: string) => b in config;
-  const errs = Object.entries(config).map(([k, v]) => validateBlock(k, v)).filter(Boolean);
+  // theme เป็นค่าตั้งของเว็บ (เช่น สีหลัก) ไม่ใช่บล็อกเนื้อหา
+  const errs = Object.entries(config).filter(([k]) => k !== "theme").map(([k, v]) => validateBlock(k, v)).filter(Boolean);
   return [
     { name: "บล็อกบังคับครบ", ok: template.required.every(present) },
     { name: "ฟิลด์ตรง schema", ok: errs.length === 0 },

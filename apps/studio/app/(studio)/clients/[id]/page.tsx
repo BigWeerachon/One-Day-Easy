@@ -1,4 +1,6 @@
 import { requirePage } from "@/lib/auth";
+import { listRuns } from "@/lib/agents";
+import { runAgentsAction } from "@/lib/actions";
 import { one } from "@/lib/db";
 import { setClientEmailAction } from "@/lib/notify-actions";
 import Link from "next/link";
@@ -38,6 +40,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
                 <label className="f"><input type="checkbox" name="pdpa" defaultChecked={j.pdpa} /> ยินยอม PDPA</label>
                 <button className="btn o sm">บันทึก</button></form>
               <JobActions job={j} back={back} />
+              <AgentPanel jobId={j.id} stage={j.stage} back={back} />
             </Card>))}
           <Card title="เว็บไซต์" pad={false}><div className="tw"><table><tbody>
             {sites.map((s) => <tr key={s.id}><td className="mono">{s.domain}</td><td>{s.template}</td><td>v{s.version}</td><td><span className={"chip " + (s.status === "live" ? "c-g" : s.status === "down" ? "c-r" : "c-y")}>{s.status}</span></td><td><Link className="btn o sm" href={`/builder?site=${s.id}`}>แก้</Link></td></tr>)}
@@ -70,4 +73,33 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
       </div>
     </div>
   </>);
+}
+
+const AGENT_LABEL: Record<string, string> = { sales: "Sales", intake: "Intake", builder: "Builder", qa: "QA", ops: "Ops" };
+const OUTCOME: Record<string, [string, string]> = {
+  pass: ["ตรวจผ่าน", "c-g"], fail: ["ตรวจไม่ผ่าน", "c-y"], escalated: ["ส่งต่อคน", "c-r"], error: ["ผิดพลาด", "c-r"], drafted: ["ร่างเว็บ", "c-b"], fixed: ["แก้แล้ว", "c-b"],
+  no_change: ["แก้ไม่ได้", "c-y"], asked: ["ถามลูกค้า", "c-p"], answered: ["ลูกค้าตอบ", "c-p"], followed_up: ["ตามลูกค้า", ""], replied: ["ตอบลูกค้า", "c-g"], handoff: ["ส่งต่อคน", "c-y"],
+};
+const STATUS: Record<string, [string, string]> = { running: ["Agent กำลังทำ", "c-b"], waiting_customer: ["รอลูกค้าตอบ", "c-p"], needs_human: ["ต้องให้คนดู", "c-r"], sent: ["ส่งลูกค้าตรวจแล้ว", "c-g"] };
+/** สิ่งที่ทีม Agent ทำกับงานนี้ · ทุกรายการมาจาก agent_runs */
+async function AgentPanel({ jobId, stage, back }: { jobId: string; stage: string; back: string }) {
+  const [runs, st] = await Promise.all([listRuns(jobId, 12), one<{ s: string | null; n: string | null }>(`select agent_status s, agent_note n from jobs where id = $1`, [jobId])]);
+  if (!runs.length && !st?.s && stage !== "template") return null;
+  const issues = (d: Record<string, unknown>) => ((d.issues as { severity: string; block: string; problem: string }[] | undefined) ?? []).filter((i) => i.severity === "block");
+  return (
+    <div style={{ marginTop: 14, borderTop: "1px solid #eef0f4", paddingTop: 12 }}>
+      <div className="f" style={{ justifyContent: "space-between" }}>
+        <b className="sm">ทีม Agent {st?.s && <span className={"chip " + STATUS[st.s][1]} style={{ marginLeft: 6 }}>{STATUS[st.s][0]}</span>}</b>
+        {stage === "template" && <form action={runAgentsAction}><input type="hidden" name="job" value={jobId} /><input type="hidden" name="back" value={back} /><SubmitButton className="btn o sm" pending="Agent กำลังทำ…">ให้ Agent ทำต่อ</SubmitButton></form>}
+      </div>
+      {st?.n && <div className="note sm" style={{ marginTop: 8 }}>{st.n}</div>}
+      <div className="list sm" style={{ gap: 6, marginTop: 8 }}>{runs.map((r) => <div key={r.id}>
+        <span className="mut">{new Date(r.at).toLocaleString("th-TH", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}</span> <b>{AGENT_LABEL[r.agent]}</b> <span className={"chip " + (OUTCOME[r.outcome]?.[1] ?? "")}>{OUTCOME[r.outcome]?.[0] ?? r.outcome}</span>
+        {typeof r.detail.summary === "string" && <span className="mut"> {r.detail.summary}</span>}
+        {typeof r.detail.why === "string" && <span className="mut"> {r.detail.why}</span>}
+        {issues(r.detail).map((i, k) => <div key={k} className="mut" style={{ marginLeft: 12 }}>• [{i.block}] {i.problem}</div>)}
+        {Array.isArray(r.detail.questions) && <div className="mut" style={{ marginLeft: 12 }}>{(r.detail.questions as string[]).join(" · ")}</div>}
+      </div>)}</div>
+    </div>
+  );
 }

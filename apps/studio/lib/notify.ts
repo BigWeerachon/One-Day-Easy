@@ -78,7 +78,9 @@ export type NotifyEvent =
   | { type: "portal.approved"; clientId: string }
   | { type: "portal.edit"; clientId: string; text: string }
   | { type: "invoice.issued"; docNo: string }
-  | { type: "task.dead"; taskId: string; name: string; error: string };
+  | { type: "task.dead"; taskId: string; name: string; error: string }
+  | { type: "agent.escalated"; jobId: string; reason: string }
+  | { type: "ops.digest"; date: string; lines: string[] };
 
 const baht = (satang: number) => `${(satang / 100).toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} บาท`;
 const TH_MO = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -150,6 +152,13 @@ async function build(e: NotifyEvent): Promise<string[]> {
       return toClient(d.client_id, "customer.document", e.docNo, { subject: `${label} ${e.docNo} · ${baht(d.total)}`,
         lines: [`แนบ${label}เลขที่ ${e.docNo} ยอด ${baht(d.total)} มาในอีเมลนี้`, ...(d.type === "QT" && d.expires ? [`ยืนราคาถึง ${d.expires}`] : ["ชำระผ่านพร้อมเพย์แล้วส่งสลิปทาง LINE ของร้าน"])] }, e.docNo);
     }
+    case "agent.escalated": {
+      const j = await one<{ client_id: string; name: string }>(`select j.client_id, c.name from jobs j join clients c on c.id = j.client_id where j.id = $1`, [e.jobId]);
+      if (!j) return [];
+      return toTeam("portal", e.type, `${e.jobId}:${Date.now()}`, { subject: `Agent ส่งต่องานให้คน: ${j.name}`, lines: ["QA ตรวจไม่ผ่านหรือ Agent ทำต่อไม่ได้ ต้องให้คนดู", e.reason], link: { href: studioUrl(`/clients/${j.client_id}`), label: "เปิดหน้าลูกค้า" } });
+    }
+    case "ops.digest":
+      return toTeam("system", e.type, e.date, { subject: `สรุปงานประจำวัน ${e.date}`, lines: e.lines, link: { href: studioUrl("/"), label: "เปิดงานวันนี้" } });
     case "task.dead":
       return toTeam("system", e.type, e.taskId, { subject: `งานอัตโนมัติล้มเหลว: ${e.name}`, lines: [e.error, "ลองใหม่ได้ที่หน้า Workflow"], link: { href: studioUrl("/workflow"), label: "เปิดหน้า Workflow" } });
   }

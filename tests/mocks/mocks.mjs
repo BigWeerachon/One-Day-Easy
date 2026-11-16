@@ -36,12 +36,13 @@ export function lineMock() {
 // /__mode: ok | 401 | refusal | invalid (แก้เว็บเกิน schema)
 // /__slip: body "ok|wrong|notslip[:ref[:amountBaht]]" กำหนดผลอ่านสลิปครั้งถัดไป
 export function claudeMock() {
-  const s = { mode: "ok", log: [], slip: { mode: "ok", ref: null, amount: null }, reset() { this.mode = "ok"; this.log = []; this.slip = { mode: "ok", ref: null, amount: null }; } };
+  const s = { mode: "ok", log: [], review: "pass", slip: { mode: "ok", ref: null, amount: null }, reset() { this.mode = "ok"; this.log = []; this.review = "pass"; this.slip = { mode: "ok", ref: null, amount: null }; } };
   const msg = (text, stop = "end_turn") => ({ id: "msg_mock", type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text }], stop_reason: stop, stop_sequence: null,
     usage: { input_tokens: 1200, output_tokens: 300, cache_read_input_tokens: 800, cache_creation_input_tokens: 0 } });
   const server = http.createServer(async (req, res) => {
     const b = await readBody(req);
     if (control(s, req, res, b)) return;
+    if (req.url === "/__review") { s.review = b || "pass"; return json(res, 200, {}); }
     if (req.url === "/__slip") { const [m, r, a] = b.split(":"); s.slip = { mode: m || "ok", ref: r || null, amount: a ? Number(a) : null }; return json(res, 200, {}); }
     const body = JSON.parse(b || "{}");
     s.log.push({ url: req.url, beta: req.headers["anthropic-beta"], key: req.headers["x-api-key"] ?? req.headers.authorization?.replace(/^Bearer /, ""), body });
@@ -56,6 +57,20 @@ export function claudeMock() {
       return json(res, 200, msg(JSON.stringify(out)));
     }
     if (s.mode === "refusal") return json(res, 200, msg("", "refusal"));
+    if (sys.includes("ผู้ตรวจคุณภาพ")) {
+      // QA Agent · /__review: pass | fail (ไม่ผ่านทุกรอบ) · บล็อกบังคับขาด = ไม่ผ่านเสมอ (ให้ระบบไปถามลูกค้า)
+      const t = body.messages?.[0]?.content?.at(-1)?.text ?? "";
+      const missing = (t.match(/<missing_required_blocks>(.*?)<\/missing_required_blocks>/) ?? [])[1] ?? "-";
+      if (missing !== "-") return json(res, 200, msg(JSON.stringify({ pass: false, issues: [], missing_from_customer: [] })));
+      if (s.review === "fail") return json(res, 200, msg(JSON.stringify({ pass: false, issues: [{ severity: "block", block: "menu", problem: "ราคาเมนูไม่มีในข้อมูลที่ลูกค้าให้", fix: "ลบราคาที่แต่งขึ้น" }], missing_from_customer: [] })));
+      return json(res, 200, msg(JSON.stringify({ pass: true, issues: [{ severity: "minor", block: "hero", problem: "คำโปรยสั้นได้อีก", fix: "-" }], missing_from_customer: [] })));
+    }
+    if (sys.includes("พนักงานขาย")) {
+      const m = (body.messages?.[0]?.content ?? "").match(/<message>(.*?)<\/message>/s)?.[1] ?? "";
+      return json(res, 200, msg(JSON.stringify(/ส่วนลด|ลดราคา|คืนเงิน/.test(m)
+        ? { action: "handoff", reply: "", reason: "ขอส่วนลด/คืนเงิน" }
+        : { action: "reply", reply: "แก้ฟรี 2 รอบค่ะ พิมพ์ \"แพ็กเกจ\" เพื่อเลือกแพ็กได้เลยค่ะ", reason: "ตอบจากข้อมูลร้าน" })));
+    }
     if (sys.includes("ร่างเว็บไซต์ฉบับแรก")) {
       // ร่างทั้งเว็บ: ใช้รหัสรูปที่ได้รับจริง · มีภาพ ref = คืนสีหลัก · ใส่บล็อกผิด schema 1 อัน และรูปที่ไม่ใช่ของลูกค้า 1 อัน เพื่อทดสอบการคัดออก
       const parts = body.messages?.[0]?.content ?? [];
@@ -74,6 +89,16 @@ export function claudeMock() {
     }
     if (sys.includes("สรุปข้อมูลที่ใช้สร้างเว็บ")) return json(res, 200, msg(JSON.stringify({ business_name: "ร้านกาแฟสมชาย", business_type: "คาเฟ่", contact_name: "คุณสมชาย", phone: null, line_id: null, address: null, opening_hours: null,
       products: [{ name: "ลาเต้", price: 65 }], style_notes: ["ชอบโทนไม้อบอุ่น"], suggested_template: "T1", missing: ["เวลาเปิด-ปิด", "ที่อยู่ร้าน"] })));
+    const instr = (typeof body.messages?.[0]?.content === "string" ? body.messages[0].content : "").match(/<instruction>(.*?)<\/instruction>/s)?.[1] ?? "";
+    if (/ลูกค้าให้ข้อมูลเพิ่ม/.test(instr)) {
+      const said = instr.match(/"(.*?)"/s)?.[1] ?? "";
+      const line = said.match(/@[\w.-]{2,}/)?.[0], addr = said.match(/ที่อยู่\s*(.+)$/)?.[1];
+      return json(res, 200, msg(JSON.stringify({ summary: "เติมข้อมูลที่ลูกค้าให้", ops: [...(line ? [{ block: "line", data_json: JSON.stringify({ id: line }) }] : []), ...(addr ? [{ block: "map", data_json: JSON.stringify({ address: addr.trim() }) }] : [])] })));
+    }
+    if (/ลูกค้าขอแก้|ผลตรวจ QA/.test(instr)) {
+      const cur = JSON.parse((body.messages[0].content.match(/<current_config>(.*?)<\/current_config>/s) ?? [])[1] ?? "{}");
+      return json(res, 200, msg(JSON.stringify({ summary: "แก้ตามคำขอ", ops: [{ block: "hero", data_json: JSON.stringify({ ...(cur.hero ?? {}), subtitle: "แก้ตามคำขอแล้ว" }) }] })));
+    }
     const ops = s.mode === "invalid"
       ? [{ block: "hero", data_json: JSON.stringify({ title: "ห".repeat(60), subtitle: "x", cta: "สั่งเลย" }) }]
       : [{ block: "hero", data_json: JSON.stringify({ title: "ครัวป้าแดง รสมือแม่", subtitle: "อาหารตามสั่งอุ่นๆ ส่งไวในย่านลาดพร้าว", cta: "สั่งเลย" }) },

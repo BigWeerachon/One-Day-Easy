@@ -8,6 +8,7 @@ import type { Stage, Actor } from "./workflow";
 import type { DocType } from "./money";
 import { sendForReview } from "./order-chat";
 import { draftForJob } from "./draft";
+import { runPipeline } from "./agents";
 
 const withErr = (p: string, err?: string) => (err ? `${p}${p.includes("?") ? "&" : "?"}err=${encodeURIComponent(err)}` : p);
 // แปลง error จาก DB (เช่น trigger) ให้อ่านได้ · redirect อยู่นอก try เพราะ Next ใช้ throw
@@ -26,6 +27,14 @@ export async function moveJobAction(f: FormData) { const me = await requireStaff
     await S.moveJob(job, to, str(f, "by") as Actor, str(f, "reason"));
     // ส่งงานให้ลูกค้าตรวจ → ส่งลิงก์ตัวอย่างพร้อมปุ่มอนุมัติ/ขอแก้เข้าแชท LINE
     if (to === "client_review") { const j = await S.getJob(job); if (j) await sendForReview(j.clientId).catch((e) => console.error("sendForReview", e)); }
+  });
+}
+/** ให้ทีม Agent เดินงานต่อ (ร่าง → QA → ส่งลูกค้าตรวจ) · ใช้หลังคนแก้เอง หรือเมื่อ Agent ส่งต่อมา */
+export async function runAgentsAction(f: FormData) { const me = await requireStaff("sites.edit");
+  const job = str(f, "job");
+  await run(str(f, "back") || "/", async () => {
+    const r = await runPipeline(job, { force: true });
+    if (r === "skipped") throw new Error("Agent ทำงานได้เฉพาะงานที่อยู่ขั้น \"เลือกเทมเพลต\" และต้องตั้ง ANTHROPIC_API_KEY");
   });
 }
 export async function draftSiteAction(f: FormData) { const me = await requireStaff("sites.edit");

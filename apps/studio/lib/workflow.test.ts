@@ -12,9 +12,11 @@ test("ห้ามข้ามขั้น: ออนไลน์ก่อนช
   assert.equal(canTransition("payment", "online", "system", { ...ok, paidInFull: false }).ok, false);
   assert.equal(canTransition("payment", "online", "system", ok).ok, true);
 });
-test("ส่งลูกค้าต้องตรวจผ่าน 6/6 และต้องเป็นคน", () => {
+test("ส่งลูกค้าต้องตรวจผ่าน 6/6 ทั้งคนและ QA Agent (system) · ลูกค้าส่งเองไม่ได้", () => {
   assert.equal(canTransition("template", "client_review", "human", { ...ok, checksPassed: 5 }).ok, false);
-  assert.equal(canTransition("template", "client_review", "system", ok).ok, false);
+  assert.equal(canTransition("template", "client_review", "system", { ...ok, checksPassed: 5 }).ok, false);
+  assert.equal(canTransition("template", "client_review", "system", ok).ok, true);
+  assert.equal(canTransition("template", "client_review", "client", ok).ok, false);
 });
 test("พักงานต้องมีเหตุผล", () => {
   assert.equal(canTransition("payment", "paused", "human", ok).ok, false);

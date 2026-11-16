@@ -26,6 +26,17 @@ export async function siteByHost(hostHeader: string | null): Promise<SiteRow | n
   return site;
 }
 
+/** เว็บจริงตามชื่อย่อ (ส่วนแรกของโดเมนระบบ เช่น kruapadaeng-a1b2c3) · เฉพาะเว็บที่ออนไลน์แล้ว */
+export async function siteBySlug(slug: string): Promise<SiteRow | null> {
+  const s = slug.toLowerCase();
+  if (!/^[a-z0-9-]{1,80}$/.test(s)) return null;
+  const hit = cache.get(`/s/${s}`);
+  if (hit && Date.now() - hit.at < TTL) return hit.site;
+  const site = (await one<SiteRow>(`select ${COLS} from sites s join clients c on c.id = s.client_id where s.status in ('live','down') and split_part(lower(s.domain), '.', 1) = $1 limit 1`, [s])) ?? null;
+  cache.set(`/s/${s}`, { at: Date.now(), site });
+  return site;
+}
+
 /** ร่าง: ต้องมีลายเซ็นจาก Studio (PREVIEW_SECRET) และยังไม่หมดอายุ · ไม่ใช้แคช */
 export async function siteForPreview(siteId: string, exp: string | null, sig: string | null): Promise<SiteRow | null> {
   if (!/^[0-9a-f-]{36}$/i.test(siteId) || !verifyPreview(siteId, exp, sig, process.env.PREVIEW_SECRET)) return null;

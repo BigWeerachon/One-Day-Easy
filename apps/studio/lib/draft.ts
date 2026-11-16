@@ -30,12 +30,7 @@ export async function draftForJob(jobId: string, opts: { by?: string; force?: bo
     const tpl = TEMPLATES.find((t) => t.id === site.template)!;
     const files = await q<{ id: string; kind: DraftImage["kind"]; mime: string; bytes: Buffer }>(
       `select id::text, kind, mime, bytes from client_files where client_id = $1 order by (kind = 'ref') desc, (kind = 'logo') desc, id limit $2`, [j.client_id, MAX_IMAGES]);
-    const lineId = (await one<{ v: string }>(`select config->'line'->>'id' v from sites where id = $1`, [siteId]))?.v ?? c.intake?.line_id ?? null;
-    const shop = {
-      name: c.name, type: c.kind, phone: c.phone ?? c.intake?.phone ?? null, opening_hours: c.hours ?? c.intake?.opening_hours ?? null,
-      address: c.address ?? c.intake?.address ?? null, line_id: lineId, menu_or_products: c.intake?.products ?? [],
-      promptpay_id: null, // ไม่ใส่พร้อมเพย์ของร้านเองโดยอัตโนมัติ · ทีมใส่เมื่อร้านยืนยัน
-    };
+    const shop = await shopOf(j.client_id, siteId);
     const r = await draftSite({ template: tpl, shop, notes: await S.clientNotes(j.client_id), images: files.map((f) => ({ ...f, mime: f.mime as SlipImageMime })) });
 
     const config: Record<string, unknown> = { ...site.config };
@@ -58,8 +53,22 @@ export async function draftForJob(jobId: string, opts: { by?: string; force?: bo
   }
 }
 
+/** ข้อมูลจริงของร้านเท่าที่ลูกค้าให้มา · ใช้ทั้งตอนร่างและตอน QA ตรวจว่าเว็บไม่มีข้อมูลที่แต่งขึ้น */
+export async function shopOf(clientId: string, siteId?: string | null) {
+  const c = (await one<{ name: string; kind: string | null; phone: string | null; hours: string | null; address: string | null; intake: Intake | null }>(
+    `select name, kind, phone, opening_hours hours, address, intake from clients where id = $1`, [clientId]))!;
+  const lineId = (siteId ? (await one<{ v: string | null }>(`select config->'line'->>'id' v from sites where id = $1`, [siteId]))?.v : null) ?? c.intake?.line_id ?? null;
+  const notes = await S.clientNotes(clientId);
+  return {
+    name: c.name, type: c.kind, phone: c.phone ?? c.intake?.phone ?? null, opening_hours: c.hours ?? c.intake?.opening_hours ?? null,
+    address: c.address ?? c.intake?.address ?? null, line_id: lineId, menu_or_products: c.intake?.products ?? [],
+    extra_info_from_customer: notes.filter((n) => n.startsWith("[ลูกค้าแจ้ง]")),
+    promptpay_id: null, // ไม่ใส่พร้อมเพย์ของร้านเองโดยอัตโนมัติ · ทีมใส่เมื่อร้านยืนยัน
+  };
+}
+
 /** รูปในร่างต้องเป็นไฟล์ของลูกค้ารายนี้เท่านั้น (กัน Claude อ้างรหัสที่ไม่มี หรือใช้ภาพ ref เป็นรูปเว็บ) */
-function badImage(data: unknown, own: Set<string>): string | null {
+export function badImage(data: unknown, own: Set<string>): string | null {
   let bad: string | null = null;
   const walk = (v: unknown, key?: string) => {
     if (bad) return;

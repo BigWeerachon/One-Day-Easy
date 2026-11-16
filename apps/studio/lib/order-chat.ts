@@ -4,7 +4,7 @@ import { q, one } from "./db";
 import type { QuickItem } from "./line";
 import * as S from "./store";
 import * as P from "./portal";
-import { previewUrl } from "./preview";
+import { previewUrl, liveUrl } from "./preview";
 import { STAGE_LABEL } from "./workflow";
 
 // ขายในแชท LINE: เมนูแพ็กเกจ → เสนอราคา → ยืนยัน → มัดจำ (QR) → ส่งข้อมูล/รูป → ส่งงานให้ตรวจ → อนุมัติหรือขอแก้ → ชำระส่วนที่เหลือ
@@ -20,11 +20,22 @@ const baht = (satang: number) => `${(satang / 100).toLocaleString("th-TH")} บ�
 const say = (clientId: string, text: string, quick?: QuickItem[], image?: string) => S.sendSystemMessage(clientId, text, quick, image);
 const packages = () => q<{ code: string; name: string; price: number }>(`select code, name, price_satang::int price from catalog_items where active and code like 'PKG-%' order by price_satang`);
 
-interface Session { awaitEdit?: boolean; paidEditText?: string; askedImgAt?: number; askedWithSlip?: boolean }
+interface Session { awaitInfo?: boolean; awaitEdit?: boolean; paidEditText?: string; askedImgAt?: number; askedWithSlip?: boolean }
 const key = (userId: string) => `od:${userId}`;
 const getSession = async (userId: string) => (await one<{ state: Session }>(`select state from line_booking_sessions where line_user_id = $1`, [key(userId)]))?.state ?? {};
 const setSession = (userId: string, s: Session) =>
   q(`insert into line_booking_sessions (line_user_id, state, updated_at) values ($1,$2,now()) on conflict (line_user_id) do update set state = $2, updated_at = now()`, [key(userId), JSON.stringify(s)]);
+
+/** Intake Agent ถามข้อมูลลูกค้าไว้ → ข้อความถัดไปของลูกค้าคือคำตอบ */
+export async function awaitCustomerInfo(clientId: string) {
+  const userId = await S.lineUserIdOf(clientId);
+  if (userId) await setSession(userId, { ...(await getSession(userId)), awaitInfo: true });
+}
+/** ลูกค้าขอแก้ → ให้ Agent แก้และตรวจ แล้วส่งตัวอย่างใหม่เอง */
+async function agentEdit(jobId: string, text: string) {
+  const { runPipeline } = await import("./agents");
+  await runPipeline(jobId, { force: true, instruction: `ลูกค้าขอแก้: "${text}"` }).catch((e) => console.error("agent edit", e));
+}
 
 /** ลิงก์รูป QR พร้อมเพย์ของใบแจ้งหนี้ (ใช้ได้ 7 วัน) · null ถ้าตั้งค่าไม่ครบหรือไม่ใช่ https (LINE ต้องการ https) */
 export function qrUrl(docNo: string) {
@@ -49,6 +60,13 @@ export function orderIntent(text: string): OrderIntent | null {
 export async function handleOrderText(clientId: string, userId: string, text: string, firstContact: boolean): Promise<boolean> {
   if (!orderBotEnabled()) return false;
   const sess = await getSession(userId);
+  if (sess.awaitInfo) {
+    // Intake Agent ถามข้อมูลไว้ → ข้อความนี้คือคำตอบ
+    await setSession(userId, { ...sess, awaitInfo: false });
+    await say(clientId, "ขอบคุณค่ะ ได้รับข้อมูลแล้ว กำลังอัปเดตเว็บให้นะคะ");
+    const { customerAnswered } = await import("./agents");
+    return await customerAnswered(clientId, text), true;
+  }
   if (sess.awaitEdit) {
     await setSession(userId, { ...sess, awaitEdit: false });
     return submitEdit(clientId, userId, text), true;
@@ -190,7 +208,7 @@ async function submitEdit(clientId: string, userId: string, text: string) {
     const ctx = await P.ctxForClient(clientId);
     if (!ctx) return;
     const r = await P.requestEdit(ctx, text);
-    if (r === "sent") { await say(clientId, "รับคำขอแก้แล้วค่ะ ทีมงานจะแก้แล้วส่งตัวอย่างใหม่ให้ตรวจในแชทนี้"); return; }
+    if (r === "sent") { await say(clientId, "รับคำขอแก้แล้วค่ะ ทีมงานจะแก้แล้วส่งตัวอย่างใหม่ให้ตรวจในแชทนี้"); await agentEdit(ctx.jobId, text); return; }
     const price = await P.extraEditPrice();
     if (!price) { await say(clientId, "รอบแก้ฟรีครบแล้วค่ะ ทีมงานจะติดต่อกลับเรื่องค่าบริการแก้เพิ่ม"); return; }
     await setSession(userId, { ...(await getSession(userId)), paidEditText: text.slice(0, 1000) });
@@ -205,6 +223,7 @@ async function paidEdit(clientId: string, text: string) {
   if (!ctx) return;
   await P.confirmPaidEdit(ctx, text);
   await say(clientId, "รับคำขอแก้เพิ่มแล้วค่ะ ค่าบริการรอบนี้จะรวมในใบแจ้งหนี้ ทีมงานจะส่งตัวอย่างใหม่ให้ตรวจในแชทนี้");
+  await agentEdit(ctx.jobId, text);
 }
 
 async function sendStatus(clientId: string) {
@@ -217,5 +236,5 @@ async function sendStatus(clientId: string) {
   };
   const quick: QuickItem[] = ctx.job.stage === "new_chat" ? [{ label: "ดูแพ็กเกจ", data: "od:menu", display: "ขอดูแพ็กเกจ" }]
     : ctx.job.stage === "client_review" ? [{ label: "✅ อนุมัติเว็บ", data: "od:approve", display: "อนุมัติเว็บนี้" }, { label: "ขอแก้", data: "od:edit", display: "ขอแก้เว็บ" }] : [];
-  await say(clientId, `สถานะงาน: ${next[ctx.job.stage]}${ctx.site && ["online", "care"].includes(ctx.job.stage) ? `\nhttps://${ctx.site.domain}` : ""}${open.length ? `\n\nยอดค้างชำระ: ${open.map((d) => `${d.no} ${baht(d.due)}`).join(" · ")}` : ""}`, quick.length ? quick : undefined);
+  await say(clientId, `สถานะงาน: ${next[ctx.job.stage]}${ctx.site && ["online", "care"].includes(ctx.job.stage) ? `\n${liveUrl(ctx.site.domain)}` : ""}${open.length ? `\n\nยอดค้างชำระ: ${open.map((d) => `${d.no} ${baht(d.due)}`).join(" · ")}` : ""}`, quick.length ? quick : undefined);
 }
