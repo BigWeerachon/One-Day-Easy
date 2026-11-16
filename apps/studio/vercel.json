@@ -1,6 +1,1 @@
-{
-  "regions": ["sin1"],
-  "crons": [
-    { "path": "/api/cron/all", "schedule": "0 1 * * *" }
-  ]
-}
+{"framework":"nextjs","regions":["sin1"],"crons":[{"path":"/api/cron/all","schedule":"0 1 * * *"}]}
