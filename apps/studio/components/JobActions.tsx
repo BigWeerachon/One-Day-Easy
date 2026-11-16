@@ -9,7 +9,7 @@ export default function JobActions({ job, back }: { job: Job; back: string }) {
       {job.stage === "paused" && job.pausedFrom && (
         <form action={moveJobAction}><input type="hidden" name="job" value={job.id} /><input type="hidden" name="back" value={back} /><input type="hidden" name="to" value={job.pausedFrom} /><input type="hidden" name="by" value="human" /><button className="btn o sm">ย้อนกลับ → {STAGE_LABEL[job.pausedFrom]}</button></form>
       )}
-      {opts.map((t) => (
+      {opts.filter((t) => !(t.by === "system" && opts.some((o) => o.to === t.to && o.by === "human"))).map((t) => (
         <form key={t.to + t.by} action={moveJobAction} className="f">
           <input type="hidden" name="job" value={job.id} /><input type="hidden" name="back" value={back} />
           <input type="hidden" name="to" value={t.to} /><input type="hidden" name="by" value={t.by} />

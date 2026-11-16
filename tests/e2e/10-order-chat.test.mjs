@@ -1,5 +1,5 @@
 // ขายในแชท LINE ครบวงจร: ทัก → เมนูแพ็ก → ใบเสนอราคา → ยืนยัน + มัดจำ (QR) → รูปร้าน/ภาพ ref → กรอกข้อมูล
-// → Claude ร่างเว็บอัตโนมัติ → ทีมส่งตรวจ → ขอแก้ → อนุมัติ → จ่ายส่วนที่เหลือ → ออนไลน์
+// → Agent ร่างเว็บ ถามข้อมูลที่ขาด ตรวจ และส่งตัวอย่างเอง → ขอแก้ → อนุมัติ → จ่ายส่วนที่เหลือ → ออนไลน์
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { URLS, resetDb, closeDb, closeBrowser, getBrowser, loginAs, act, chat, lineText, lineImage, linePostback, linePushes, quick, mockPost, mockLog, sql, val, waitFor, errorText } from "./lib.mjs";
@@ -78,56 +78,64 @@ test("ลูกค้ากรอกข้อมูลร้าน → Claude �
   await m.fill("input[name=hours]", "ทุกวัน 06:00–22:00");
   await m.locator("input[name=pdpa]").check();
   await Promise.all([m.waitForResponse((r) => r.request().method() === "POST"), m.getByRole("button", { name: "ส่งข้อมูล" }).click()]);
-  await waitFor(async () => (await val(`select draft_status from jobs where id = $1`, [job])) === "done", { timeout: 20_000, message: "ร่างอัตโนมัติไม่เสร็จ" });
+  await waitFor(async () => (await val(`select agent_status from jobs where id = $1`, [job])) === "waiting_customer", { timeout: 30_000, message: "Agent ไม่ได้ร่างและถามข้อมูลที่ขาด" });
   assert.equal(await stage(), "template");
+  assert.equal(await val(`select draft_status from jobs where id = $1`, [job]), "done");
   const s = (await sql(`select s.id, s.template, s.config, s.domain from jobs j join sites s on s.id = j.site_id where j.id = $1`, [job]))[0];
   assert.equal(s.template, "T3");
   const photo = await val(`select id from client_files where client_id = $1 and kind = 'photo'`, [client]);
   assert.equal(s.config.hero.image, `file:${photo}`);
   assert.match(s.config.hero.title, /ครัวคุณยาย/);
-  assert.equal(s.config.theme.primary, "#1f6f54");
+  // Design Agent: สีหลักจากภาพ ref · ฟอนต์นอกรายการและสีที่อ่านยากถูกคัดออก (ใช้ของเทมเพลตแทน)
+  assert.deepEqual(s.config.theme, { primary: "#1f6f54", accent: "#f2c14e", font: "Sarabun", radius: 20 });
+  const brief = await val(`select design_brief from jobs where id = $1`, [job]);
+  assert.equal(brief.usedRef, true);
+  assert.equal(brief.heroPhoto, `file:${photo}`);
+  assert.ok(brief.dropped.some((x) => /Comic Sans/.test(x)) && brief.dropped.some((x) => /อ่านยาก/.test(x)));
   assert.ok(s.config.menu && s.config.hours);
   assert.equal(s.config.faq, undefined, "บล็อกผิด schema ต้องถูกคัดออก");
   assert.equal(s.config.reviews, undefined, "รูปที่ไม่ใช่ของลูกค้าต้องถูกคัดออก");
   assert.match(s.domain, /\.onedayeasy\.app$/);
+  // หน้าเว็บจริงใช้ธีมของนักออกแบบ
   // Claude ได้เห็นทั้งรูปร้านและภาพ ref
   const reqs = (await mockLog("claude")).filter((l) => l.body.system?.[0]?.text.includes("ร่างเว็บไซต์ฉบับแรก"));
   assert.equal(reqs.length, 1);
   assert.equal(reqs[0].body.messages[0].content.filter((c) => c.type === "image").length, 2);
 });
 
-const toReview = async () => {
-  const p = await loginAs("builder");
-  await p.goto(`${URLS.studio}/clients/${client}`);
-  await act(p, p.getByRole("button", { name: /→ ลูกค้าตรวจ/ }));
-  assert.equal(await errorText(p), null);
-};
-
-test("ทีมกดส่งตรวจ → ลูกค้าได้ลิงก์ตัวอย่างพร้อมปุ่มอนุมัติ/ขอแก้ในแชท", async () => {
-  // ทีมเติมส่วนที่ขาดจนผ่านตรวจ 6/6 (จำลองด้วยการแก้ข้อมูลตรง)
-  await sql(`update sites set config = config || '{"line":{"id":"@kruayai"},"legal":{"pdpa":"นโยบาย"}}'::jsonb where id = (select site_id from jobs where id = $1)`, [job]);
-  await sql(`update jobs set checks_passed = 6 where id = $1`, [job]);
-  const before = (await linePushes(U)).length;
-  await toReview();
-  const m = await waitFor(async () => { const x = await linePushes(U); return x.length > before ? x.at(-1) : null; });
-  assert.match(m.text, /พร้อมให้ตรวจแล้ว/);
+test("Intake Agent ถามข้อมูลที่ขาด → ลูกค้าตอบในแชท → Builder เติม → QA ผ่าน → ส่งตัวอย่างให้ลูกค้าเอง", async () => {
+  const ask = (await linePushes(U)).at(-1);
+  assert.match(ask.text, /ขอข้อมูลเพิ่ม/);
+  assert.match(ask.text, /LINE ID/);
+  assert.match(ask.text, /ที่อยู่ร้าน/);
+  await lineText(U, "@kruayai ที่อยู่ 12 ซอยลาดพร้าว 71 กรุงเทพ");
+  const m = await waitFor(async () => (await linePushes(U)).find((x) => /พร้อมให้ตรวจแล้ว/.test(x.text)), { timeout: 30_000, message: "ไม่ได้ส่งตัวอย่างให้ลูกค้า" });
   assert.match(m.text, /\/preview\/[0-9a-f-]{36}\?exp=/);
   assert.deepEqual(quick(m).map((a) => a.data), ["od:approve", "od:edit"]);
+  assert.equal(await stage(), "client_review");
+  const cfg = await val(`select s.config from jobs j join sites s on s.id = j.site_id where j.id = $1`, [job]);
+  assert.equal(cfg.line.id, "@kruayai");
+  assert.match(cfg.map.address, /ลาดพร้าว 71/);
+  assert.ok(cfg.legal.pdpa.includes("ครัวคุณยาย"));
+  assert.deepEqual((await sql(`select agent, outcome from agent_runs where job_id = $1 order by id`, [job])).map((r) => `${r.agent}:${r.outcome}`),
+    ["design:designed", "builder:drafted", "qa:fail", "intake:asked", "intake:answered", "builder:fixed", "qa:pass", "dev:pass"]);
+  // Dev Agent เปิดหน้าตัวอย่างจริงและโหลดรูปของร้านได้
+  const dev = await val(`select detail from agent_runs where job_id = $1 and agent = 'dev'`, [job]);
+  assert.ok(dev.checked.images >= 1 && dev.checked.bytes > 1000);
 });
 
-test("ขอแก้ในแชท → งานกลับไปให้ทีมแก้ · นับรอบ", async () => {
+test("ขอแก้ในแชท → Builder แก้ → QA ตรวจ → ส่งตัวอย่างใหม่เอง · นับรอบ", async () => {
+  const n = (await linePushes(U)).filter((x) => /พร้อมให้ตรวจแล้ว/.test(x.text)).length;
   await chat(U, () => linePostback(U, "od:edit"));
-  const m = await chat(U, () => lineText(U, "ขอเปลี่ยนรูปหน้าแรกเป็นรูปหน้าร้านค่ะ"));
-  assert.match(m.text, /รับคำขอแก้แล้ว/);
-  assert.equal(await stage(), "template");
+  await lineText(U, "ขอเปลี่ยนคำโปรยหน้าแรกค่ะ");
+  await waitFor(async () => (await linePushes(U)).filter((x) => /พร้อมให้ตรวจแล้ว/.test(x.text)).length === n + 1, { timeout: 30_000, message: "ไม่ได้ส่งตัวอย่างใหม่หลังแก้" });
+  assert.equal(await stage(), "client_review");
   assert.equal(await val(`select edit_rounds from jobs where id = $1`, [job]), 1);
-  assert.match(await val(`select edit_requests->0->>'text' from jobs where id = $1`, [job]), /เปลี่ยนรูปหน้าแรก/);
+  assert.equal(await val(`select s.config->'hero'->>'subtitle' from jobs j join sites s on s.id = j.site_id where j.id = $1`, [job]), "แก้ตามคำขอแล้ว");
+  assert.ok((await linePushes(U)).some((x) => /รับคำขอแก้แล้ว/.test(x.text)));
 });
 
 test("อนุมัติในแชท → ใบแจ้งหนี้ส่วนที่เหลือ (หักมัดจำ) พร้อม QR", async () => {
-  const before = (await linePushes(U)).length;
-  await toReview();
-  await waitFor(async () => (await linePushes(U)).length > before);
   const m = await chat(U, () => linePostback(U, "od:approve"));
   assert.match(m.text, /ใบแจ้งหนี้ INV-\d{4}-\d{3} ยอด 1,495 บาท/);
   assert.ok(m.image?.includes("/qr"));
@@ -143,6 +151,13 @@ test("จ่ายส่วนที่เหลือในแชท → เว
   const st = await chat(U, () => lineText(U, "เว็บถึงไหนแล้วคะ"));
   assert.match(st.text, /เว็บออนไลน์แล้ว/);
   assert.match(st.text, /onedayeasy\.app/);
+  assert.match(m.text, /เว็บของคุณออนไลน์แล้ว/);
+  // ที่อยู่แบบ path บน Engine (ใช้ช่วงที่ยังไม่มีโดเมนหลัก) เปิดเว็บเดียวกันได้
+  const slug = (await val(`select s.domain from jobs j join sites s on s.id = j.site_id where j.id = $1`, [job])).split(".")[0];
+  const page = await fetch(`${URLS.engine}/s/${slug}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /ครัวคุณยาย/);
+  assert.equal((await fetch(`${URLS.engine}/s/no-such-shop`)).status, 404);
 });
 
 test("ปุ่มจองคิวยังทำงานแยกจากบอทขาย", async () => {

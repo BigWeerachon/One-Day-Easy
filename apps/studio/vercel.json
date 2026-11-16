@@ -1,6 +1,1 @@
-{ "crons": [
-  { "path": "/api/cron/line", "schedule": "*/5 * * * *" },
-  { "path": "/api/cron/domains", "schedule": "*/10 * * * *" },
-  { "path": "/api/cron/booking", "schedule": "*/5 * * * *" },
-  { "path": "/api/cron/email", "schedule": "*/5 * * * *" }
-] }
+{"framework":"nextjs","regions":["sin1"],"crons":[{"path":"/api/cron/all","schedule":"0 1 * * *"}]}

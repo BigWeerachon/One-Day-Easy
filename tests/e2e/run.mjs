@@ -18,7 +18,7 @@ const env = {
   ...process.env, NODE_ENV: "production",
   DATABASE_URL: dbUrl, INSECURE_COOKIES: "1",
   STUDIO_URL: `http://127.0.0.1:${P.studio}`, ENGINE_URL: `http://127.0.0.1:${P.engine}`, PREVIEW_SECRET: "e2e-preview-secret",
-  LINE_CHANNEL_SECRET: "e2e-line-secret", LINE_CHANNEL_ACCESS_TOKEN: "e2e-line-token", CRON_SECRET: "e2e-cron-secret",
+  LINE_CHANNEL_SECRET: "e2e-line-secret", LINE_CHANNEL_ACCESS_TOKEN: "e2e-line-token", CRON_SECRET: "e2e-cron-secret", TICK_ON_REQUEST: "off",
   LINE_API_BASE: `http://127.0.0.1:${P.line}`, LINE_DATA_API_BASE: `http://127.0.0.1:${P.line}`,
   ANTHROPIC_API_KEY: "e2e-anthropic-key", ANTHROPIC_BASE_URL: `http://127.0.0.1:${P.claude}`,
   VERCEL_TOKEN: "vtok", VERCEL_TEAM_ID: "team_e2e", ENGINE_PROJECT_ID: "engine-e2e", VERCEL_API_BASE: `http://127.0.0.1:${P.vercel}`, PLATFORM_DOMAIN: "onedayeasy.app",

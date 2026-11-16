@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { one } from "./db";
 import { aiConfigured } from "./ai";
 import { draftForJob } from "./draft";
+import { agentsEnabled, runPipeline } from "./agents";
 import { revalidatePath } from "next/cache";
 import * as P from "./portal";
 
@@ -39,10 +40,16 @@ export async function requestEditAction(f: FormData) {
   await withCtx(f, async (ctx) => {
     const text = s(f, "text");
     const r = await P.requestEdit(ctx, text);
+    if (r === "sent") agentEditLater(ctx.jobId, text);
     return r === "needs-payment" ? `extra=${encodeURIComponent(text.slice(0, 1000))}` : "ok=edit";
   });
 }
-export async function paidEditAction(f: FormData) { await withCtx(f, async (ctx) => { await P.confirmPaidEdit(ctx, s(f, "text")); return "ok=edit"; }); }
+export async function paidEditAction(f: FormData) { await withCtx(f, async (ctx) => { await P.confirmPaidEdit(ctx, s(f, "text")); agentEditLater(ctx.jobId, s(f, "text")); return "ok=edit"; }); }
+/** ลูกค้าขอแก้ใน Portal → Agent แก้ ตรวจ แล้วส่งตัวอย่างใหม่ (ทำหลังตอบหน้าเว็บแล้ว) */
+function agentEditLater(jobId: string, text: string) {
+  if (!agentsEnabled()) return;
+  after(async () => { try { await runPipeline(jobId, { force: true, instruction: `ลูกค้าขอแก้: "${text.slice(0, 1000)}"` }); revalidatePath("/", "layout"); } catch (e) { console.error("agent edit", e); } });
+}
 export async function slipAction(f: FormData) {
   await withCtx(f, async (ctx) => {
     const [img] = await images(f, "slip", 1);
@@ -80,7 +87,10 @@ export async function intakeStateAction(_prev: IntakeState, f: FormData): Promis
     after(async () => {
       try {
         const j = await one<{ stage: string; site_id: string | null }>(`select stage, site_id from jobs where id = $1`, [jobId]);
-        if (j?.stage === "template" && !j.site_id) { await draftForJob(jobId); revalidatePath("/", "layout"); }
+        if (j?.stage !== "template" || j.site_id) return;
+        // มีทีม Agent = ร่าง → QA → ส่งลูกค้าตรวจเอง · ปิด Agent = ร่างอย่างเดียว รอทีมตรวจ
+        if (agentsEnabled()) await runPipeline(jobId); else await draftForJob(jobId);
+        revalidatePath("/", "layout");
       } catch (e) { console.error("auto draft", e); }
     });
   }

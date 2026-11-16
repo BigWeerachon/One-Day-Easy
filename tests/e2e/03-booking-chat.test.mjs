@@ -28,10 +28,10 @@ test("ลูกค้าใหม่ทักครั้งแรก → ได
   await waitFor(async () => (await linePushes(U2)).length === 1);
 });
 
-test("ข้อความทั่วไปครั้งถัดไป → บอทไม่ตอบ", async () => {
-  await lineText(U, "ขอบคุณค่ะ");
-  await new Promise((r) => setTimeout(r, 800));
-  assert.equal((await linePushes(U)).length, 1);
+test("ข้อความทั่วไปครั้งถัดไป → บอทคิว/บอทขายไม่ตอบ · Sales Agent รับไปตอบ", async () => {
+  const m = await chat(U, () => lineText(U, "แก้ได้กี่รอบคะ"));
+  assert.doesNotMatch(m.text, /แพ็กเกจทำเว็บ|วันที่ว่าง|กันที่/);
+  assert.equal(await val(`select count(*)::int from agent_runs where agent = 'sales' and outcome = 'replied'`), 1);
 });
 
 test("หลายบริการ ไม่ระบุ → ถามบริการพร้อมปุ่ม", async () => {
@@ -147,12 +147,13 @@ test("ปุ่มของลูกค้าคนอื่นใช้ไม�
   assert.match(m.text, /ไม่พบคิวนี้/);
 });
 
-test("ปิดจองผ่าน LINE → บอทเงียบ ข้อความเข้ากล่องข้อความ", async () => {
+test("ปิดจองผ่าน LINE → บอทคิวไม่ทำงาน (ไม่กันที่ ไม่เสนอวัน)", async () => {
   await sql(`update booking_settings set line_enabled = false`);
-  const n = (await linePushes(U)).length;
+  const n = (await linePushes(U)).length, held = await val(`select count(*)::int from bookings where status = 'held'`);
   await lineText(U, "จองคิวพรุ่งนี้");
-  await new Promise((r) => setTimeout(r, 1000));
-  assert.equal((await linePushes(U)).length, n);
+  await new Promise((r) => setTimeout(r, 1200));
+  assert.ok((await linePushes(U)).slice(n).every((m) => !/วันที่ว่าง|กันที่|มีคิวว่าง|บริการไหน/.test(m.text)));
+  assert.equal(await val(`select count(*)::int from bookings where status = 'held'`), held);
   await sql(`update booking_settings set line_enabled = true`);
 });
 
