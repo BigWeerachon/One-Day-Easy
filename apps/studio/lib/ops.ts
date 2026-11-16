@@ -66,3 +66,26 @@ export async function dailyDigest(now = new Date()) {
   await notify({ type: "ops.digest", date, lines: await buildDigest() });
   return true;
 }
+
+/** Dev Agent: เปิดเว็บที่ออนไลน์แล้วผ่าน Site Engine ทีละชุด · เปิดไม่ได้ 2 ครั้งติดกัน = ตั้งสถานะ "ล่ม" และแจ้ง Owner · กลับมาเปิดได้ = คืนสถานะเอง */
+export async function checkLiveSites(limit = 10) {
+  const engine = (process.env.ENGINE_URL ?? "").replace(/\/$/, "");
+  if (!engine) return 0;
+  const sites = await q<{ id: string; domain: string; status: string; check_error: string | null; client_id: string }>(
+    `select id, domain, status, check_error, client_id from sites where status in ('live','down') and (checked_at is null or checked_at < now() - interval '6 hours') order by checked_at nulls first limit $1`, [limit]);
+  for (const s of sites) {
+    let err: string | null = null;
+    try {
+      const r = await fetch(`${engine}/s/${s.domain.split(".")[0]}`, { signal: AbortSignal.timeout(20_000) });
+      // เว็บสถานะ "ล่ม" ยังถูก Engine แสดงอยู่ จึงใช้ตรวจการกลับมาได้
+      if (r.status !== 200) err = `Site Engine ตอบ ${r.status}`;
+    } catch (e) { err = `เปิดไม่ได้: ${(e as Error).message}`; }
+    const second = err && s.check_error; // ล้มเหลวครั้งที่สองติดกัน
+    await q(`update sites set checked_at = now(), check_error = $2, status = case when $3 then 'down' when $2::text is null then 'live' else status end where id = $1`, [s.id, err, !!second]);
+    if (second && s.status === "live") {
+      await logRun("dev", "site_down", { clientId: s.client_id, detail: { domain: s.domain, problems: [err] } });
+      await notify({ type: "site.down", siteId: s.id, domain: s.domain, error: err! });
+    } else if (!err && s.status === "down") await logRun("dev", "site_recovered", { clientId: s.client_id, detail: { domain: s.domain } });
+  }
+  return sites.length;
+}

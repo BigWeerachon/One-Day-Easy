@@ -57,6 +57,15 @@ export function claudeMock() {
       return json(res, 200, msg(JSON.stringify(out)));
     }
     if (s.mode === "refusal") return json(res, 200, msg("", "refusal"));
+    if (sys.includes("นักออกแบบเว็บ")) {
+      // Design Agent: มีภาพ ref = ชุดสีเขียว · ไม่มี = ชุดสีน้ำตาล · จงใจส่งฟอนต์นอกรายการและสีพื้น/ตัวหนังสือที่อ่านยาก เพื่อทดสอบการคัดออก
+      const parts = body.messages?.[0]?.content ?? [];
+      const hasRef = parts.some((c) => c.type === "text" && c.text.includes("ภาพ ref"));
+      const photo = parts.filter((c) => c.type === "text").map((c) => c.text.match(/รูปของร้าน (file:\d+):$/)?.[1]).filter(Boolean)[0] ?? null;
+      const shop = JSON.parse((parts.at(-1).text.match(/<shop>(.*?)<\/shop>/s) ?? [])[1] ?? "{}");
+      return json(res, 200, msg(JSON.stringify({ template: /คาเฟ่|กาแฟ/.test(shop.type ?? "") ? "T1" : "T3", primary: hasRef ? "#1f6f54" : "#7a4a2a", accent: "#f2c14e", bg: "#fffdf7", text: "#fff8e8",
+        heading_font: "Comic Sans", body_font: "Sarabun", radius: 20, tone: "เป็นกันเอง อบอุ่น แบบร้านในซอย", hero_photo: photo, rationale: hasRef ? "ใช้โทนเขียวจากภาพ ref ของลูกค้า" : "ใช้โทนน้ำตาลอุ่นให้เข้ากับร้านอาหาร" })));
+    }
     if (sys.includes("ผู้ตรวจคุณภาพ")) {
       // QA Agent · /__review: pass | fail (ไม่ผ่านทุกรอบ) · บล็อกบังคับขาด = ไม่ผ่านเสมอ (ให้ระบบไปถามลูกค้า)
       const t = body.messages?.[0]?.content?.at(-1)?.text ?? "";

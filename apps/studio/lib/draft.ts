@@ -2,6 +2,7 @@ import "server-only";
 import { q, one } from "./db";
 import * as S from "./store";
 import { TEMPLATES, validateBlock, runChecks } from "./blocks";
+import type { ThemeOverride } from "@ode/blocks/themes";
 import { aiConfigured, draftSite, type DraftImage, type SlipImageMime, type Intake } from "./ai";
 
 // ร่างเว็บฉบับแรกอัตโนมัติ: เลือกเทมเพลต → สร้างเว็บ → Claude ร่างทุกบล็อกจากข้อมูลร้าน รูป และภาพ ref
@@ -15,7 +16,8 @@ export function pickTemplate(kind: string | null, suggested: string | null | und
   return /คาเฟ่|กาแฟ|cafe|coffee|เบเกอรี|ขนม/i.test(kind ?? "") ? "T1" : "T3";
 }
 
-export async function draftForJob(jobId: string, opts: { by?: string; force?: boolean } = {}): Promise<{ siteId: string; summary: string; applied: string[]; skipped: { block: string; error: string }[] }> {
+export interface Design { template: string; theme: ThemeOverride; tone: string; heroPhoto: string | null }
+export async function draftForJob(jobId: string, opts: { by?: string; force?: boolean; design?: Design } = {}): Promise<{ siteId: string; summary: string; applied: string[]; skipped: { block: string; error: string }[] }> {
   if (!aiConfigured()) throw new Error("ยังไม่ได้ตั้ง ANTHROPIC_API_KEY");
   const j = await one<{ client_id: string; site_id: string | null; draft_status: string | null }>(`select client_id, site_id, draft_status from jobs where id = $1`, [jobId]);
   if (!j) throw new Error("ไม่พบงาน");
@@ -25,13 +27,15 @@ export async function draftForJob(jobId: string, opts: { by?: string; force?: bo
   try {
     const c = (await one<{ name: string; kind: string | null; phone: string | null; hours: string | null; address: string | null; intake: Intake | null }>(
       `select name, kind, phone, opening_hours hours, address, intake from clients where id = $1`, [j.client_id]))!;
-    const siteId = j.site_id ?? await S.createSiteForJob(jobId, pickTemplate(c.kind, c.intake?.suggested_template));
+    const siteId = j.site_id ?? await S.createSiteForJob(jobId, opts.design?.template ?? pickTemplate(c.kind, c.intake?.suggested_template));
     const site = (await S.getSite(siteId))!;
     const tpl = TEMPLATES.find((t) => t.id === site.template)!;
     const files = await q<{ id: string; kind: DraftImage["kind"]; mime: string; bytes: Buffer }>(
       `select id::text, kind, mime, bytes from client_files where client_id = $1 order by (kind = 'ref') desc, (kind = 'logo') desc, id limit $2`, [j.client_id, MAX_IMAGES]);
     const shop = await shopOf(j.client_id, siteId);
-    const r = await draftSite({ template: tpl, shop, notes: await S.clientNotes(j.client_id), images: files.map((f) => ({ ...f, mime: f.mime as SlipImageMime })) });
+    const d = opts.design;
+    const designNotes = d ? [`โทนภาษาที่นักออกแบบกำหนด: ${d.tone}`, ...(d.heroPhoto ? [`รูปหน้าแรกที่นักออกแบบเลือก: ${d.heroPhoto}`] : [])] : [];
+    const r = await draftSite({ template: tpl, shop, notes: [...(await S.clientNotes(j.client_id)), ...designNotes], images: files.map((f) => ({ ...f, mime: f.mime as SlipImageMime })) });
 
     const config: Record<string, unknown> = { ...site.config };
     const applied: string[] = [], skipped: { block: string; error: string }[] = [];
@@ -41,7 +45,9 @@ export async function draftForJob(jobId: string, opts: { by?: string; force?: bo
       if (err) { skipped.push({ block: op.block, error: err }); continue; }
       config[op.block] = op.data; applied.push(op.block);
     }
-    if (r.themePrimary) config.theme = { ...(config.theme as object ?? {}), primary: r.themePrimary };
+    // มี Design Agent = ใช้ธีมของนักออกแบบ · ไม่มี = ใช้สีหลักที่ Claude ดึงจากภาพตอนร่าง
+    if (d) config.theme = d.theme;
+    else if (r.themePrimary) config.theme = { ...(config.theme as object ?? {}), primary: r.themePrimary };
     const propId = await S.saveProposal(siteId, site.version, "ร่างทั้งเว็บอัตโนมัติ", r.summary, r.ops.map((o) => ({ block: o.block, data: o.data, error: skipped.find((s) => s.block === o.block)?.error ?? null })), r.usage);
     await q(`update patch_proposals set status = 'applied' where id = $1`, [propId]);
     await S.saveSiteConfig(siteId, config, opts.by ?? "Claude", "ร่างทั้งเว็บอัตโนมัติ", runChecks(tpl, config).filter((x) => x.ok).length);

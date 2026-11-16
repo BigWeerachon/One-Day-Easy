@@ -86,11 +86,17 @@ test("ลูกค้ากรอกข้อมูลร้าน → Claude �
   const photo = await val(`select id from client_files where client_id = $1 and kind = 'photo'`, [client]);
   assert.equal(s.config.hero.image, `file:${photo}`);
   assert.match(s.config.hero.title, /ครัวคุณยาย/);
-  assert.equal(s.config.theme.primary, "#1f6f54");
+  // Design Agent: สีหลักจากภาพ ref · ฟอนต์นอกรายการและสีที่อ่านยากถูกคัดออก (ใช้ของเทมเพลตแทน)
+  assert.deepEqual(s.config.theme, { primary: "#1f6f54", accent: "#f2c14e", font: "Sarabun", radius: 20 });
+  const brief = await val(`select design_brief from jobs where id = $1`, [job]);
+  assert.equal(brief.usedRef, true);
+  assert.equal(brief.heroPhoto, `file:${photo}`);
+  assert.ok(brief.dropped.some((x) => /Comic Sans/.test(x)) && brief.dropped.some((x) => /อ่านยาก/.test(x)));
   assert.ok(s.config.menu && s.config.hours);
   assert.equal(s.config.faq, undefined, "บล็อกผิด schema ต้องถูกคัดออก");
   assert.equal(s.config.reviews, undefined, "รูปที่ไม่ใช่ของลูกค้าต้องถูกคัดออก");
   assert.match(s.domain, /\.onedayeasy\.app$/);
+  // หน้าเว็บจริงใช้ธีมของนักออกแบบ
   // Claude ได้เห็นทั้งรูปร้านและภาพ ref
   const reqs = (await mockLog("claude")).filter((l) => l.body.system?.[0]?.text.includes("ร่างเว็บไซต์ฉบับแรก"));
   assert.equal(reqs.length, 1);
@@ -112,7 +118,10 @@ test("Intake Agent ถามข้อมูลที่ขาด → ลูก�
   assert.match(cfg.map.address, /ลาดพร้าว 71/);
   assert.ok(cfg.legal.pdpa.includes("ครัวคุณยาย"));
   assert.deepEqual((await sql(`select agent, outcome from agent_runs where job_id = $1 order by id`, [job])).map((r) => `${r.agent}:${r.outcome}`),
-    ["builder:drafted", "qa:fail", "intake:asked", "intake:answered", "builder:fixed", "qa:pass"]);
+    ["design:designed", "builder:drafted", "qa:fail", "intake:asked", "intake:answered", "builder:fixed", "qa:pass", "dev:pass"]);
+  // Dev Agent เปิดหน้าตัวอย่างจริงและโหลดรูปของร้านได้
+  const dev = await val(`select detail from agent_runs where job_id = $1 and agent = 'dev'`, [job]);
+  assert.ok(dev.checked.images >= 1 && dev.checked.bytes > 1000);
 });
 
 test("ขอแก้ในแชท → Builder แก้ → QA ตรวจ → ส่งตัวอย่างใหม่เอง · นับรอบ", async () => {

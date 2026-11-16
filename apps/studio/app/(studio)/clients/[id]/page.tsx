@@ -75,9 +75,9 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   </>);
 }
 
-const AGENT_LABEL: Record<string, string> = { sales: "Sales", intake: "Intake", builder: "Builder", qa: "QA", ops: "Ops" };
+const AGENT_LABEL: Record<string, string> = { sales: "Sales", intake: "Intake", design: "Design", builder: "Builder", qa: "QA", dev: "Dev", ops: "Ops" };
 const OUTCOME: Record<string, [string, string]> = {
-  pass: ["ตรวจผ่าน", "c-g"], fail: ["ตรวจไม่ผ่าน", "c-y"], escalated: ["ส่งต่อคน", "c-r"], error: ["ผิดพลาด", "c-r"], drafted: ["ร่างเว็บ", "c-b"], fixed: ["แก้แล้ว", "c-b"],
+  designed: ["ออกแบบแล้ว", "c-p"], skipped: ["ข้าม", ""], pass: ["ตรวจผ่าน", "c-g"], fail: ["ตรวจไม่ผ่าน", "c-y"], escalated: ["ส่งต่อคน", "c-r"], error: ["ผิดพลาด", "c-r"], drafted: ["ร่างเว็บ", "c-b"], fixed: ["แก้แล้ว", "c-b"],
   no_change: ["แก้ไม่ได้", "c-y"], asked: ["ถามลูกค้า", "c-p"], answered: ["ลูกค้าตอบ", "c-p"], followed_up: ["ตามลูกค้า", ""], replied: ["ตอบลูกค้า", "c-g"], handoff: ["ส่งต่อคน", "c-y"],
 };
 const STATUS: Record<string, [string, string]> = { running: ["Agent กำลังทำ", "c-b"], waiting_customer: ["รอลูกค้าตอบ", "c-p"], needs_human: ["ต้องให้คนดู", "c-r"], sent: ["ส่งลูกค้าตรวจแล้ว", "c-g"] };
@@ -98,6 +98,8 @@ async function AgentPanel({ jobId, stage, back }: { jobId: string; stage: string
         {typeof r.detail.summary === "string" && <span className="mut"> {r.detail.summary}</span>}
         {typeof r.detail.why === "string" && <span className="mut"> {r.detail.why}</span>}
         {issues(r.detail).map((i, k) => <div key={k} className="mut" style={{ marginLeft: 12 }}>• [{i.block}] {i.problem}</div>)}
+        {Array.isArray(r.detail.problems) && (r.detail.problems as string[]).map((x, k) => <div key={k} className="mut" style={{ marginLeft: 12 }}>• {x}</div>)}
+        {r.agent === "design" && <div className="mut" style={{ marginLeft: 12 }}>เทมเพลต {String(r.detail.template)} · โทน: {String(r.detail.tone)} {Object.entries((r.detail.theme ?? {}) as Record<string, unknown>).filter(([, v]) => typeof v === "string" && /^#/.test(v as string)).map(([k, v]) => <span key={k} title={k} style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: v as string, border: "1px solid #d6dae3", marginLeft: 3, verticalAlign: "middle" }} />)}</div>}
         {Array.isArray(r.detail.questions) && <div className="mut" style={{ marginLeft: 12 }}>{(r.detail.questions as string[]).join(" · ")}</div>}
       </div>)}</div>
     </div>

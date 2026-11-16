@@ -80,7 +80,8 @@ export type NotifyEvent =
   | { type: "invoice.issued"; docNo: string }
   | { type: "task.dead"; taskId: string; name: string; error: string }
   | { type: "agent.escalated"; jobId: string; reason: string }
-  | { type: "ops.digest"; date: string; lines: string[] };
+  | { type: "ops.digest"; date: string; lines: string[] }
+  | { type: "site.down"; siteId: string; domain: string; error: string };
 
 const baht = (satang: number) => `${(satang / 100).toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} บาท`;
 const TH_MO = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -157,6 +158,8 @@ async function build(e: NotifyEvent): Promise<string[]> {
       if (!j) return [];
       return toTeam("portal", e.type, `${e.jobId}:${Date.now()}`, { subject: `Agent ส่งต่องานให้คน: ${j.name}`, lines: ["QA ตรวจไม่ผ่านหรือ Agent ทำต่อไม่ได้ ต้องให้คนดู", e.reason], link: { href: studioUrl(`/clients/${j.client_id}`), label: "เปิดหน้าลูกค้า" } });
     }
+    case "site.down":
+      return toTeam("system", e.type, `${e.siteId}:${new Date().toISOString().slice(0, 13)}`, { subject: `เว็บลูกค้าเปิดไม่ได้: ${e.domain}`, lines: [e.error, "Dev Agent ตรวจแล้วเปิดไม่ได้ 2 ครั้งติดกัน"], link: { href: studioUrl(`/builder?site=${e.siteId}`), label: "เปิดเว็บนี้ในหลังบ้าน" } });
     case "ops.digest":
       return toTeam("system", e.type, e.date, { subject: `สรุปงานประจำวัน ${e.date}`, lines: e.lines, link: { href: studioUrl("/"), label: "เปิดงานวันนี้" } });
     case "task.dead":
