@@ -503,15 +503,18 @@ Dev Agent ในที่นี้ตรวจและเฝ้าระบบ 
 - คิวงานอัตโนมัติ: queued / running / failed / dead · ปุ่ม **ลองใหม่**
 - ตารางการเปลี่ยนขั้นที่อนุญาต และ event log
 
-### 13.2 cron (ตั้งไว้แล้วใน `apps/studio/vercel.json`)
+### 13.2 cron
 
-| path | ความถี่ | ทำอะไร |
+Vercel แผน Hobby ตั้ง cron ได้วันละครั้ง ระบบจึงรวมงานตามเวลาทั้งหมดไว้ที่ `/api/cron/all` (`apps/studio/lib/tick.ts`) และเรียกจาก 3 ทาง:
+
+| ทาง | ความถี่ | ตั้งที่ |
 |---|---|---|
-| `/api/cron/line` | ทุก 5 นาที | ส่ง LINE ที่ล้มเหลวซ้ำตาม backoff · ครบ 3 ครั้ง → dead-letter |
-| `/api/cron/domains` | ทุก 10 นาที | ตรวจยืนยันโดเมน DNS และ SSL |
-| `/api/cron/ops` | ทุกชั่วโมง | Ops Agent: ตามลูกค้าที่เงียบ · สรุปงานรายวัน |
-| `/api/cron/email` | ทุก 5 นาที | ส่งอีเมลที่ค้าง · ลองใหม่ฉบับที่ล้มเหลว |
-| `/api/cron/booking` | ทุก 5 นาที | ปล่อยที่ที่ไม่ยืนยัน · ส่ง LINE เตือนก่อนนัด · ล้างข้อมูลกันซ้ำของ webhook |
+| GitHub Actions | ทุก 5 นาที | `.github/workflows/cron.yml` · ต้องตั้ง repo secrets `STUDIO_URL` และ `CRON_SECRET` (Settings → Secrets and variables → Actions) |
+| มีคนใช้ระบบ (LINE webhook, เปิดหน้า Studio) | อย่างมากนาทีละครั้ง | อัตโนมัติ · ปิดได้ด้วย `TICK_ON_REQUEST=off` |
+| Vercel Cron | วันละครั้ง 08:00 น. | `apps/studio/vercel.json` |
+
+`/api/cron/all` ทำ: ส่ง LINE ที่ค้าง · ส่งอีเมลที่ค้าง · ปล่อยคิวที่ไม่ยืนยัน · เตือนก่อนนัด · ตรวจโดเมน · หมดอายุเอกสาร · Ops ตามลูกค้าที่เงียบ · Dev ตรวจเว็บออนไลน์ · สรุปงานรายวัน
+path เดิม (`/api/cron/line`, `/domains`, `/ops`, `/email`, `/booking`) ยังเรียกแยกได้
 
 ทุก path ต้องส่ง header `Authorization: Bearer $CRON_SECRET` (Vercel Cron ส่งให้อัตโนมัติ) ถ้าไม่ส่งจะได้ 401
 
@@ -556,7 +559,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://<studio>/api/cron/booking
    DATABASE_URL=... npm run db:setup -w apps/studio
    ```
 
-2. **Vercel โปรเจกต์ Studio:** Root Directory = `apps/studio` · ตั้ง env ตาม[ภาคผนวก](#19-ภาคผนวก-environment-variables) · บน serverless ใช้ Transaction pooler (port 6543) · cron ใน `vercel.json` ทำงานอัตโนมัติ
+2. **Vercel โปรเจกต์ Studio:** Root Directory = `apps/studio` · ตั้ง env ตาม[ภาคผนวก](#19-ภาคผนวก-environment-variables) · บน serverless ใช้ Transaction pooler (port 6543) · cron วันละครั้งใน `vercel.json` + GitHub Actions ทุก 5 นาที (ดู 13.2)
 3. **Vercel โปรเจกต์ Engine:** Root Directory = `apps/engine` · ตั้ง `DATABASE_URL` และ `PREVIEW_SECRET` · ผูก wildcard `*.PLATFORM_DOMAIN`
 4. **สร้าง Owner คนแรก** ด้วย `user:create` (ชี้ `DATABASE_URL` ไปที่ฐานข้อมูลจริง)
 5. **LINE Developers:** Webhook URL = `https://<studio>/api/line/webhook` → Verify → เปิด Use webhook · ปิด Auto-reply ใน LINE OA Manager

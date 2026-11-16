@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { handleBookingText, handleBookingPostback } from "@/lib/booking-chat";
 import { handleOrderText, handleOrderPostback, onImageSaved } from "@/lib/order-chat";
 import { salesAnswer } from "@/lib/agents";
+import { tickSoon } from "@/lib/tick";
 import { q } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -90,5 +91,6 @@ export async function POST(req: Request) {
     }
   }
   if (saved) revalidatePath("/", "layout");
+  after(() => tickSoon().catch((e) => console.error("tick", e))); // งานตามเวลา: อาศัยทุกข้อความที่เข้ามา (อย่างมากนาทีละครั้ง)
   return Response.json({ ok: true, saved });
 }
