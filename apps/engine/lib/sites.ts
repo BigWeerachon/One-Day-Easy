@@ -2,8 +2,10 @@ import "server-only";
 import { one } from "./db";
 import { verifyPreview } from "@ode/blocks/sign";
 
-export interface SiteRow { id: string; clientId: string; domain: string; template: string; status: string; version: number; config: Record<string, unknown>; clientName: string }
-const COLS = `s.id, s.client_id "clientId", s.domain, s.template, s.status, s.version, s.config, c.name "clientName"`;
+export interface SiteRow { id: string; clientId: string; domain: string; template: string; status: string; version: number; config: Record<string, unknown>; clientName: string;
+  /** ระบบร้าน Sabai (ถ้าเชื่อม) · คีย์ใช้ฝั่งเซิร์ฟเวอร์เท่านั้น ห้ามส่งไปเบราว์เซอร์ */
+  sabaiApi: string | null; sabaiKey: string | null }
+const COLS = `s.id, s.client_id "clientId", s.domain, s.template, s.status, s.version, s.config, c.name "clientName", s.sabai_api "sabaiApi", s.sabai_key "sabaiKey"`;
 
 // แคชสั้นๆ ต่อโดเมน (30 วิ) · แก้เว็บใน Studio แล้วเห็นผลภายในครึ่งนาที
 const TTL = 30_000;

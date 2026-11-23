@@ -16,5 +16,5 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function Home() {
   const site = await siteByHost((await headers()).get("host"));
   if (!site) notFound();
-  return <Site site={site} />;
+  return <Site site={site} orderHref="/order" />;
 }

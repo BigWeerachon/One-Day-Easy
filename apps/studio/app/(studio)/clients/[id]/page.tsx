@@ -1,8 +1,8 @@
 import { requirePage } from "@/lib/auth";
 import { listRuns } from "@/lib/agents";
 import { runAgentsAction } from "@/lib/actions";
-import { one } from "@/lib/db";
-import { setClientEmailAction } from "@/lib/notify-actions";
+import { one, q } from "@/lib/db";
+import { setClientEmailAction, setSabaiLinkAction } from "@/lib/notify-actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClient, clientNotes, listJobs, listSites, listDocs, listEvents, getIntake } from "@/lib/store";
@@ -20,6 +20,8 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   const { id } = await params; const { err, portal, sent } = await searchParams;
   const c = await getClient(id); if (!c) notFound();
   const [jobs, sites, docs, notes, ik] = await Promise.all([listJobs(id), listSites(id), listDocs(id), clientNotes(id), getIntake(id)]);
+  // คีย์ไม่ส่งมาที่หน้าจอ · บอกแค่ว่าเชื่อมแล้วกับ API ไหน
+  const sabai = new Map((await q<{ id: string; api: string }>(`select id, sabai_api api from sites where client_id = $1 and sabai_key is not null`, [id])).map((r) => [r.id, r.api]));
   const intake = ik?.intake;
   const email = (await one<{ v: string }>(`select value v from contacts where client_id = $1 and channel = 'Email' order by id desc limit 1`, [id]))?.v;
   const evs = jobs.length ? await listEvents(jobs.map((j) => j.id), 20) : [];
@@ -45,6 +47,15 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
           <Card title="เว็บไซต์" pad={false}><div className="tw"><table><tbody>
             {sites.map((s) => <tr key={s.id}><td className="mono">{s.domain}</td><td>{s.template}</td><td>v{s.version}</td><td><span className={"chip " + (s.status === "live" ? "c-g" : s.status === "down" ? "c-r" : "c-y")}>{s.status}</span></td><td><Link className="btn o sm" href={`/builder?site=${s.id}`}>แก้</Link></td></tr>)}
             {!sites.length && <tr><td className="mut">ยังไม่มีเว็บ</td></tr>}
+            {sites.map((s) => <tr key={`sabai-${s.id}`}><td colSpan={5}>
+              <form action={setSabaiLinkAction} className="f" aria-label={`เชื่อม ${s.domain} กับระบบร้าน Sabai`}>
+                <input type="hidden" name="client" value={id} /><input type="hidden" name="site" value={s.id} />
+                <span className="mut">ระบบร้าน Sabai {sabai.get(s.id) ? "· เชื่อมแล้ว" : ""}</span>
+                <input className="inp" name="api" placeholder="https://api.ร้าน.com" defaultValue={sabai.get(s.id) ?? ""} aria-label="ที่อยู่ API ของ Sabai" />
+                <input className="inp mono" name="key" placeholder={sabai.get(s.id) ? "เว้นว่าง = ใช้คีย์เดิม" : "sbw_…"} aria-label="คีย์เว็บไซต์ของสาขา" autoComplete="off" />
+                <button className="btn sm o">บันทึก</button>
+              </form>
+            </td></tr>)}
           </tbody></table></div></Card>
           <Card title="เอกสาร" pad={false}><div className="tw"><table><tbody>
             {docs.map((d) => <tr key={d.no}><td className="mono">{d.no}</td><td>{DOC_LABEL[d.type]}</td><td>{baht(d.total)}</td><td>{d.status}</td><td>{can(me.role, "finance.view") && <a className="btn o sm" href={`/api/docs/${d.no}/pdf`} target="_blank" rel="noopener">PDF</a>}</td></tr>)}

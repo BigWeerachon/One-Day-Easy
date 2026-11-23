@@ -3,6 +3,7 @@ import { TEMPLATES } from "@ode/blocks/blocks";
 import { themeFor } from "@ode/blocks/themes";
 import { promptPayPayload } from "@ode/blocks/promptpay";
 import type { SiteRow } from "@/lib/sites";
+import { sabaiMenu } from "@/lib/sabai";
 
 type Any = Record<string, unknown>;
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -25,8 +26,15 @@ async function qrSvg(text: string) {
   return QRCode.toString(text, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
 }
 
-export default async function Site({ site, fileQuery = "" }: { site: SiteRow; fileQuery?: string }) {
-  const c = site.config as Record<string, Any>;
+export default async function Site({ site, fileQuery = "", orderHref }: { site: SiteRow; fileQuery?: string; orderHref?: string }) {
+  const c = { ...(site.config as Record<string, Any>) };
+  // เชื่อม Sabai: เมนูบนเว็บมาจาก POS (ราคาและของหมดตรงกับหน้าร้าน) · ใช้รูปจาก POS ถ้ามี ไม่มีก็ใช้รูปเดิมในเว็บที่ชื่อตรงกัน
+  const live = await sabaiMenu(site);
+  if (live && live.items.length) {
+    const old = new Map(arr<Any>(c.menu?.items).map((m) => [str(m.name), m]));
+    c.menu = { ...(c.menu ?? {}), items: live.items.map((i) => ({ ...(old.get(i.name) ?? {}), name: i.name, price: Number(i.price), img: i.imageUrl ?? old.get(i.name)?.img, soldOut: !i.available })) };
+  }
+  const canOrder = !!(live?.ordering && orderHref);
   const tpl = TEMPLATES.find((t) => t.id === site.template);
   const t = themeFor(site.template, site.config);
   const order = (tpl?.blocks ?? Object.keys(c)).filter((b) => c[b] && typeof c[b] === "object");
@@ -43,7 +51,8 @@ export default async function Site({ site, fileQuery = "" }: { site: SiteRow; fi
       </div></header>),
     menu: () => <Section id="menu" title="เมนู"><div className="grid">{arr<Any>(c.menu.items).map((m, i) => (
       <div className="card item" key={i}><Img s={m.img} alt={str(m.name)} q={fileQuery} /><div className="row"><b>{str(m.name)}</b><span className="price">{thb(num(m.price))}</span></div>
-        <div className="meta">{num(m.spicy) ? "🌶".repeat(Math.min(3, num(m.spicy)!)) : ""} {m.tag ? <span className="tag">{str(m.tag)}</span> : null}</div></div>))}</div></Section>,
+        <div className="meta">{num(m.spicy) ? "🌶".repeat(Math.min(3, num(m.spicy)!)) : ""} {m.tag ? <span className="tag">{str(m.tag)}</span> : null}{m.soldOut ? <span className="tag">หมดชั่วคราว</span> : null}</div></div>))}</div>
+      {canOrder && <p style={{ marginTop: 16 }}><a className="cta" href={orderHref}>สั่งออนไลน์ รับที่ร้าน</a></p>}</Section>,
     sets: () => <Section id="sets" title="ชุดคุ้มค่า" alt><div className="grid">{arr<Any>(c.sets.items).map((m, i) => (
       <div className="card item" key={i}><b>{str(m.name)}</b><div className="meta">สำหรับ {num(m.for) ?? "-"} คน</div><div className="row"><span className="price">{thb(num(m.price))}</span>{num(m.was) ? <s className="meta">{thb(num(m.was))}</s> : null}</div></div>))}</div></Section>,
     rooms: () => <Section id="rooms" title="ห้องพัก"><div className="grid">{arr<Any>(c.rooms.items).map((m, i) => (
@@ -71,7 +80,7 @@ export default async function Site({ site, fileQuery = "" }: { site: SiteRow; fi
   const hasContact = lineUrl || hours.open || map.address || ppQr;
   return (
     <div className={"site" + (t.dark ? " dark" : "")} style={style}>
-      <nav className="top"><div className="wrap row"><b className="brand">{site.clientName}</b>{lineUrl && <a className="cta sm" href={lineUrl}>แอด LINE</a>}</div></nav>
+      <nav className="top"><div className="wrap row"><b className="brand">{site.clientName}</b>{canOrder ? <a className="cta sm" href={orderHref}>สั่งออนไลน์</a> : lineUrl && <a className="cta sm" href={lineUrl}>แอด LINE</a>}</div></nav>
       {body}
       {hasContact && <Section id="contact" title="ติดต่อ & เวลาเปิด" alt><div className="grid">
         {!!(hours.open || hours.days) && <div className="card item"><b>เวลาเปิด</b><p>{str(hours.days)} {str(hours.open)}–{str(hours.close)}</p>{!!hours.last_order && <p className="meta">สั่งรอบสุดท้าย {str(hours.last_order)}</p>}</div>}

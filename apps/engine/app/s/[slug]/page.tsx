@@ -16,5 +16,5 @@ export default async function BySlug({ params }: { params: Promise<{ slug: strin
   const { slug } = await params;
   const site = await siteBySlug(slug);
   if (!site) notFound();
-  return <Site site={site} fileQuery={`?slug=${encodeURIComponent(slug)}`} />;
+  return <Site site={site} fileQuery={`?slug=${encodeURIComponent(slug)}`} orderHref={`/s/${slug}/order`} />;
 }
