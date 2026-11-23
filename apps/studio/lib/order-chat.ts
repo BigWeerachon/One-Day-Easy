@@ -48,9 +48,10 @@ export function qrUrl(docNo: string) {
 const payHint = () => (process.env.PROMPTPAY_ID ? `พร้อมเพย์ ${process.env.PROMPTPAY_ID}` : "ช่องทางที่ทีมงานแจ้ง");
 
 // ---------- ข้อความเข้า ----------
-export type OrderIntent = "menu" | "status";
+export type OrderIntent = "menu" | "status" | "selfedit";
 export function orderIntent(text: string): OrderIntent | null {
   const t = text.toLowerCase();
+  if (/^(ขอ)?(ลิงก์)?(แก้|เปลี่ยน|อัปเดต|อัพเดท)\s*(เว็บ|เมนู|ราคา|รูป|เวลาเปิด|ข้อมูลร้าน)/.test(t.trim())) return "selfedit";
   if (/สถานะ|ถึงไหน|คืบหน้า|เสร็จ(หรือ)?ยัง|เว็บ(ของ)?(ฉัน|ผม|เรา|หนู).*(ยัง|ไหม)/.test(t)) return "status";
   if (/ทำเว็บ|เว็บไซต์|อยากได้เว็บ|รับทำเว็บ|แพ็ก|package|ราคา|เท่าไ(ร|หร่)|สั่งทำ|สนใจ/.test(t)) return "menu";
   return null;
@@ -73,6 +74,7 @@ export async function handleOrderText(clientId: string, userId: string, text: st
   }
   const intent = orderIntent(text);
   if (intent === "status") return await sendStatus(clientId), true;
+  if (intent === "selfedit" && await sendEditLink(clientId)) return true;
   if (intent === "menu" || firstContact) return await sendMenu(clientId, firstContact), true;
   return false;
 }
@@ -101,6 +103,22 @@ export async function handleOrderPostback(clientId: string, userId: string, data
     console.error("order chat", op, e);
     await say(clientId, `ขออภัยค่ะ ทำรายการไม่สำเร็จ: ${(e as Error).message}\nทีมงานจะเข้ามาช่วยดูให้ค่ะ`);
   }
+  return true;
+}
+
+// ---------- แก้เว็บเอง (หลังออนไลน์) ----------
+/** เว็บออนไลน์แล้ว → ส่งลิงก์หน้าแก้เว็บเอง · ยังไม่ออนไลน์ = false ให้ข้อความไปทางอื่นตามปกติ */
+async function sendEditLink(clientId: string) {
+  const ctx = await P.ctxForClient(clientId);
+  if (!ctx || !["online", "care"].includes(ctx.job.stage)) return false;
+  const { selfEditAccess } = await import("./self-edit");
+  const a = await selfEditAccess(ctx);
+  if (!a.ok) {
+    await say(clientId, "สิทธิ์แก้เว็บเองหมดแล้วค่ะ (แก้เองได้ 1 ปีหลังเว็บออนไลน์ ต่อได้ด้วยค่าดูแลรายปี)\nพิมพ์สิ่งที่อยากแก้มาได้เลย ทีมงานจะแจ้งค่าบริการก่อนแก้ให้ค่ะ");
+    return true;
+  }
+  const token = await P.createPortalLink(clientId, "line-bot");
+  await say(clientId, `ลิงก์แก้เว็บของร้าน (ใช้ได้ ${P.LINK_DAYS} วัน)\n${P.portalUrl(token)}/edit\n\nเปลี่ยนรูปหน้าแรก เมนู ราคา เวลาเปิด และคำถามที่พบบ่อยได้เอง บันทึกแล้วเว็บเปลี่ยนภายใน 1 นาทีค่ะ`);
   return true;
 }
 

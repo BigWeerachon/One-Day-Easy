@@ -92,3 +92,6 @@ from (values
 ) x(c, n, s, r, d, t, status, q, src)
 join booking_services sv on sv.code = x.s
 cross join lateral (select (((now() at time zone 'Asia/Bangkok')::date + x.d) + x.t::time) at time zone 'Asia/Bangkok' st) z;
+
+-- เว็บที่ออนไลน์ใน seed: ออนไลน์มา 30 วัน (ยังแก้เองได้)
+update sites set live_at = now() - interval '30 day' where status in ('live','down') and live_at is null;

@@ -115,7 +115,7 @@ async function moveJobTx(c: Db, jobId: string, to: Stage, by: Actor, reason?: st
   // trigger ในฐานข้อมูลตรวจซ้ำอีกชั้น (enforce_job_transition)
   await c.query(`update jobs set stage = $2::job_stage, approved = approved or $2::job_stage = 'invoice' where id = $1`, [jobId, to]);
   // ขึ้นออนไลน์ = เปิดเว็บบน Site Engine ตามโดเมน
-  if (to === "online") await c.query(`update sites set status = 'live' where id = (select site_id from jobs where id = $1) and status = 'draft'`, [jobId]);
+  if (to === "online") await c.query(`update sites set status = 'live', live_at = coalesce(live_at, now()) where id = (select site_id from jobs where id = $1) and status = 'draft'`, [jobId]);
   const name = to === "paused" ? "job.paused" : resuming ? "job.resumed"
     : j.stage === "client_review" && to === "template" ? "edit.requested"
     : to === "client_review" ? "preview.sent" : to === "invoice" ? "site.approved" : to === "online" ? "site.published"

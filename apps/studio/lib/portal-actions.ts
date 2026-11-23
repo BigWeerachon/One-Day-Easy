@@ -7,6 +7,7 @@ import { draftForJob } from "./draft";
 import { agentsEnabled, runPipeline } from "./agents";
 import { revalidatePath } from "next/cache";
 import * as P from "./portal";
+import * as SE from "./self-edit";
 
 const IMG = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type Img = (typeof IMG)[number];
@@ -97,3 +98,42 @@ export async function intakeStateAction(_prev: IntakeState, f: FormData): Promis
   revalidatePath(`/p/${token}`);
   redirect(`/p/${token}?ok=intake`);
 }
+
+// ---------- แก้เว็บเอง (หลังออนไลน์) ----------
+async function withEdit(f: FormData, fn: (ctx: P.PortalCtx, version: number) => Promise<void>, ok: string) {
+  const token = s(f, "t");
+  const r = await P.resolvePortal(token);
+  if (r.status !== "ok") redirect(`/p/${encodeURIComponent(token)}`);
+  let err: string | undefined;
+  try { await fn(r.ctx, Number(s(f, "v"))); } catch (e) { err = (e as Error).message; }
+  revalidatePath(`/p/${token}/edit`);
+  redirect(`/p/${token}/edit?${err ? `err=${encodeURIComponent(err)}` : `ok=${ok}`}`);
+}
+const rowsOf = (f: FormData, n: number) => Array.from({ length: n }, (_, i) => i);
+export async function editHeroAction(f: FormData) {
+  await withEdit(f, async (ctx, version) => {
+    const [image] = await images(f, "image", 1);
+    await SE.saveHero(ctx, { version, title: s(f, "title"), subtitle: s(f, "subtitle"), image, removeImage: s(f, "noimage") === "1" });
+  }, "hero");
+}
+export async function editItemsAction(f: FormData) {
+  await withEdit(f, async (ctx, version) => {
+    const n = Math.min(80, Number(s(f, "n")) || 0);
+    const rows: SE.ItemRow[] = [];
+    for (const i of rowsOf(f, n)) {
+      const [image] = await images(f, `image${i}`, 1);
+      rows.push({ name: s(f, `name${i}`), price: s(f, `price${i}`), desc: s(f, `desc${i}`), img: s(f, `img${i}`), image, remove: s(f, `del${i}`) === "1" });
+    }
+    await SE.saveItems(ctx, { version, rows });
+  }, "items");
+}
+export async function editHoursAction(f: FormData) {
+  await withEdit(f, (ctx, version) => SE.saveHours(ctx, { version, days: s(f, "days"), open: s(f, "open"), close: s(f, "close") }), "hours");
+}
+export async function editFaqAction(f: FormData) {
+  await withEdit(f, async (ctx, version) => {
+    const n = Math.min(20, Number(s(f, "n")) || 0);
+    await SE.saveFaq(ctx, { version, rows: rowsOf(f, n).map((i) => ({ q: s(f, `q${i}`), a: s(f, `a${i}`), remove: s(f, `del${i}`) === "1" })) });
+  }, "faq");
+}
+export async function undoEditAction(f: FormData) { await withEdit(f, (ctx, version) => SE.undoSelfEdit(ctx, version), "undo"); }
