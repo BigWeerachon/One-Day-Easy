@@ -33,10 +33,10 @@ insert into jobs (id, client_id, site_id, title, stage, template, checks_passed,
  (pg_temp.u('a8'),pg_temp.u('c4'),pg_temp.u('b3'),'แอร์ดีเซอร์วิส','online','T5',6,true,true,true,0,'มิ้น', null),
  (pg_temp.u('a9'),pg_temp.u('c7'),null,'PULSE Gym','new_chat',null,0,false,false,false,0,'มิ้น', now() + interval '8 hour');
 
+-- ราคาจริงมาจาก migration 0014 · seed เพิ่มเฉพาะแพ็กเก่าที่ปิดขายแล้ว (เอกสารตัวอย่างยังอ้างถึง)
 insert into catalog_items values
- ('PKG-START','แพ็ก Start · เว็บ 1 หน้า',159000,false,true), ('PKG-BASIC','แพ็ก Basic · หลายบล็อก + โดเมน',299000,false,true),
- ('PKG-PRO','แพ็ก Pro · จองห้อง/บริการ',599000,false,true), ('PKG-BIZ','แพ็ก Business',899000,false,true),
- ('CARE-Y','ดูแลรายปี + โฮสติ้ง',299000,true,true), ('EDIT-X','แก้เพิ่มเกินรอบ (ต่อครั้ง)',45000,false,true);
+ ('PKG-PRO','แพ็ก Pro · จองห้อง/บริการ',599000,false,false), ('PKG-BIZ','แพ็ก Business',899000,false,false)
+on conflict (code) do nothing;
 
 insert into documents (no, type, client_id, job_id, total_satang, paid_satang, status, revision, issued_at) values
  ('INV-2611-008','INV',pg_temp.u('c3'),pg_temp.u('a6'),745000,0,'issued',1,'2026-10-29'),

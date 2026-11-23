@@ -12,8 +12,8 @@ import { STAGE_LABEL } from "./workflow";
 // ข้อความที่ไม่เกี่ยวยังเข้ากล่องข้อความให้ทีมตอบตามปกติ
 
 export const orderBotEnabled = () => (process.env.ORDER_BOT ?? "on") !== "off";
-/** มัดจำตอนยืนยันสั่งทำ เป็น % ของราคาแพ็ก · 0 = ไม่เก็บมัดจำ · สูงสุด 90 (ต้องเหลือยอดให้ออกใบตอนส่งงาน) */
-export const depositPercent = () => Math.min(90, Math.max(0, Math.round(Number(process.env.ORDER_DEPOSIT_PERCENT ?? 50)) || 0));
+/** มัดจำตอนยืนยันสั่งทำ เป็น % ของราคาแพ็ก · ค่าเริ่มต้น 0 = ไม่เก็บมัดจำ ลูกค้าดูตัวอย่างก่อนแล้วจ่ายเต็มตอนอนุมัติ · สูงสุด 90 (ต้องเหลือยอดให้ออกใบตอนส่งงาน) */
+export const depositPercent = () => Math.min(90, Math.max(0, Math.round(Number(process.env.ORDER_DEPOSIT_PERCENT ?? 0)) || 0));
 
 const PKG: Record<string, string> = { "PKG-START": "Start", "PKG-BASIC": "Basic", "PKG-PRO": "Pro", "PKG-BIZ": "Business" };
 const baht = (satang: number) => `${(satang / 100).toLocaleString("th-TH")} บาท`;
@@ -122,7 +122,7 @@ async function quote(clientId: string, code: string) {
   const qt = (await one<{ no: string }>(`select no from documents where client_id = $1 and type = 'QT' and status = 'issued' and total_satang = $2 order by no desc limit 1`, [clientId, p.price]))?.no
     ?? await S.issueDoc("QT", clientId, p.price, ctx?.jobId);
   const dep = depositPercent(), depAmt = Math.round(p.price * dep / 100);
-  await say(clientId, `ใบเสนอราคา ${qt}\n${p.name}\nราคา ${baht(p.price)}${dep ? `\nมัดจำ ${dep}% = ${baht(depAmt)} · ส่วนที่เหลือ ${baht(p.price - depAmt)} ชำระเมื่ออนุมัติเว็บ` : "\nชำระเมื่ออนุมัติเว็บ"}\nแก้ฟรี ${P.FREE_EDITS} รอบ\n\nกด "ยืนยันสั่งทำ" เพื่อเริ่มงานค่ะ`, [
+  await say(clientId, `ใบเสนอราคา ${qt}\n${p.name}\nราคา ${baht(p.price)}${dep ? `\nมัดจำ ${dep}% = ${baht(depAmt)} · ส่วนที่เหลือ ${baht(p.price - depAmt)} ชำระเมื่ออนุมัติเว็บ` : "\nไม่ต้องจ่ายก่อน ดูตัวอย่างเว็บก่อน ถูกใจค่อยชำระตอนอนุมัติ"}\nแก้ฟรี ${P.FREE_EDITS} รอบ\n\nกด "ยืนยันสั่งทำ" เพื่อเริ่มงานค่ะ`, [
     { label: "✅ ยืนยันสั่งทำ", data: `od:ok:${code}`, display: `ยืนยันสั่งทำ ${p.name}` },
     { label: "ดูแพ็กอื่น", data: "od:menu", display: "ขอดูแพ็กอื่น" },
   ]);

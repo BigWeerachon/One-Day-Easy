@@ -1,5 +1,5 @@
-// ขายในแชท LINE ครบวงจร: ทัก → เมนูแพ็ก → ใบเสนอราคา → ยืนยัน + มัดจำ (QR) → รูปร้าน/ภาพ ref → กรอกข้อมูล
-// → Agent ร่างเว็บ ถามข้อมูลที่ขาด ตรวจ และส่งตัวอย่างเอง → ขอแก้ → อนุมัติ → จ่ายส่วนที่เหลือ → ออนไลน์
+// ขายในแชท LINE ครบวงจร (ไม่มีมัดจำ): ทัก → เมนูแพ็ก → ใบเสนอราคา → ยืนยัน → รูปร้าน/ภาพ ref → กรอกข้อมูล
+// → Agent ร่างเว็บ ถามข้อมูลที่ขาด ตรวจ และส่งตัวอย่างเอง → ขอแก้ → อนุมัติ → จ่ายเต็มจำนวน → ออนไลน์
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { URLS, resetDb, closeDb, closeBrowser, getBrowser, loginAs, act, chat, lineText, lineImage, linePostback, linePushes, quick, mockPost, mockLog, sql, val, waitFor, errorText } from "./lib.mjs";
@@ -14,7 +14,7 @@ const stage = () => val(`select stage from jobs where id = $1`, [job]);
 test("ลูกค้าใหม่ทัก → ได้เมนูแพ็กเกจพร้อมปุ่ม", async () => {
   const m = await chat(U, () => lineText(U, "สวัสดีค่ะ อยากทำเว็บร้านอาหาร"));
   assert.match(m.text, /แพ็กเกจทำเว็บ/);
-  assert.deepEqual(quick(m).map((a) => a.data), ["od:pkg:PKG-START", "od:pkg:PKG-BASIC", "od:pkg:PKG-PRO", "od:pkg:PKG-BIZ"]);
+  assert.deepEqual(quick(m).map((a) => a.data), ["od:pkg:PKG-START", "od:pkg:PKG-BASIC"]);
   client = await val(`select client_id from contacts where value = $1`, [U]);
   job = await val(`select id from jobs where client_id = $1`, [client]);
 });
@@ -22,35 +22,31 @@ test("ลูกค้าใหม่ทัก → ได้เมนูแพ็
 test("เลือกแพ็ก → ใบเสนอราคาในแชท (ออกเอกสารจริง ไม่ซ้ำเมื่อกดซ้ำ)", async () => {
   const m = await chat(U, () => linePostback(U, "od:pkg:PKG-BASIC"));
   assert.match(m.text, /ใบเสนอราคา QT-\d{4}-\d{3}/);
-  assert.match(m.text, /ราคา 2,990 บาท/);
-  assert.match(m.text, /มัดจำ 50% = 1,495 บาท/);
+  assert.match(m.text, /ราคา 1,490 บาท/);
+  assert.match(m.text, /ไม่ต้องจ่ายก่อน/);
+  assert.doesNotMatch(m.text, /มัดจำ/);
   await chat(U, () => linePostback(U, "od:pkg:PKG-BASIC"));
   assert.equal(await val(`select count(*)::int from documents where client_id = $1 and type = 'QT'`, [client]), 1);
   assert.ok(data(m, "od:ok:PKG-BASIC"));
 });
 
 let portalUrl;
-test("ยืนยันสั่งทำ → ใบมัดจำ + QR พร้อมเพย์เป็นรูปในแชท + ลิงก์กรอกข้อมูล", async () => {
+test("ยืนยันสั่งทำ → ไม่มีใบมัดจำ · ได้ลิงก์กรอกข้อมูล", async () => {
   const m = await chat(U, () => linePostback(U, "od:ok:PKG-BASIC"));
   assert.match(m.text, /รับออเดอร์แล้ว/);
   assert.equal(await stage(), "intake");
   assert.equal(await val(`select package from clients where id = $1`, [client]), "Basic");
-  const dep = await val(`select deposit_doc from jobs where id = $1`, [job]);
-  assert.equal(await val(`select total_satang::int from documents where no = $1`, [dep]), 149500);
-  // QR: รูป PNG จริง · ลายเซ็นผิดเปิดไม่ได้
-  assert.ok(m.image?.includes(`/api/pay/${dep}/qr`));
-  const png = await fetch(m.image);
-  assert.equal(png.status, 200);
-  assert.equal(png.headers.get("content-type"), "image/png");
-  assert.equal((await fetch(m.image.replace(/sig=.*/, "sig=bad"))).status, 404);
+  assert.equal(await val(`select deposit_doc from jobs where id = $1`, [job]), null);
+  assert.ok(!m.image, "ไม่มี QR เพราะยังไม่ต้องจ่าย");
+  assert.doesNotMatch(m.text, /มัดจำ/);
   portalUrl = m.text.match(/http\S+\/p\/[\w-]+/)[0];
-  // กดยืนยันซ้ำ → ไม่ออกใบมัดจำใบที่สอง
+  // กดยืนยันซ้ำ → ยังไม่มีใบแจ้งหนี้
   const again = await chat(U, () => linePostback(U, "od:ok:PKG-BASIC"));
-  assert.equal(await val(`select count(*)::int from documents where client_id = $1 and type = 'INV'`, [client]), 1);
+  assert.equal(await val(`select count(*)::int from documents where client_id = $1 and type = 'INV'`, [client]), 0);
   portalUrl = again.text.match(/http\S+\/p\/[\w-]+/)[0]; // ลิงก์ล่าสุดเท่านั้นที่ใช้ได้ (ลิงก์เก่าถูกยกเลิก)
 });
 
-test("ส่งรูปในแชท (มีใบค้าง แต่ไม่ใช่สลิป) → เก็บเป็นรูปร้าน · ลูกค้าบอกได้ว่าเป็นภาพ ref", async () => {
+test("ส่งรูปในแชท (ไม่ใช่สลิป) → เก็บเป็นรูปร้าน · ลูกค้าบอกได้ว่าเป็นภาพ ref", async () => {
   await mockPost("claude", "/__slip", "notslip");
   const ask = await chat(U, () => lineImage(U, "ord-img-1"));
   assert.match(ask.text, /รูปชุดนี้คืออะไร/);
@@ -60,14 +56,6 @@ test("ส่งรูปในแชท (มีใบค้าง แต่ไ�
   await chat(U, () => linePostback(U, data(ask2, "od:img:photo")));
   assert.deepEqual((await sql(`select kind from client_files where client_id = $1 order by id`, [client])).map((r) => r.kind), ["ref", "photo"]);
   assert.equal(await val(`select count(*)::int from slips where client_id = $1 and status = 'pending'`, [client]), 0, "รูปร้านต้องไม่ค้างในคิวสลิป");
-});
-
-test("ส่งสลิปมัดจำในแชท → รับชำระ · งานยังไม่ขึ้นออนไลน์", async () => {
-  await mockPost("claude", "/__slip", "ok:ORD-DEP-1:1495");
-  const m = await chat(U, () => lineImage(U, "ord-slip-1"));
-  assert.match(m.text, /ได้รับชำระ 1,495 บาท/);
-  assert.equal(await val(`select d.status from jobs j join documents d on d.no = j.deposit_doc where j.id = $1`, [job]), "paid");
-  assert.equal(await stage(), "intake");
 });
 
 test("ลูกค้ากรอกข้อมูลร้าน → Claude ร่างเว็บอัตโนมัติ (เทมเพลตตามประเภทร้าน · ใช้รูปร้าน · สีจากภาพ ref · คัดบล็อกผิดออก)", async () => {
@@ -135,17 +123,21 @@ test("ขอแก้ในแชท → Builder แก้ → QA ตรวจ �
   assert.ok((await linePushes(U)).some((x) => /รับคำขอแก้แล้ว/.test(x.text)));
 });
 
-test("อนุมัติในแชท → ใบแจ้งหนี้ส่วนที่เหลือ (หักมัดจำ) พร้อม QR", async () => {
+test("อนุมัติในแชท → ใบแจ้งหนี้เต็มจำนวนพร้อม QR (QR เปิดได้เฉพาะลายเซ็นถูก)", async () => {
   const m = await chat(U, () => linePostback(U, "od:approve"));
-  assert.match(m.text, /ใบแจ้งหนี้ INV-\d{4}-\d{3} ยอด 1,495 บาท/);
+  assert.match(m.text, /ใบแจ้งหนี้ INV-\d{4}-\d{3} ยอด 1,490 บาท/);
   assert.ok(m.image?.includes("/qr"));
+  const png = await fetch(m.image);
+  assert.equal(png.status, 200);
+  assert.equal(png.headers.get("content-type"), "image/png");
+  assert.equal((await fetch(m.image.replace(/sig=.*/, "sig=bad"))).status, 404);
   assert.equal(await stage(), "payment");
 });
 
-test("จ่ายส่วนที่เหลือในแชท → เว็บออนไลน์ · ถามสถานะได้", async () => {
-  await mockPost("claude", "/__slip", "ok:ORD-FINAL-1:1495");
+test("จ่ายในแชท → เว็บออนไลน์ · ถามสถานะได้", async () => {
+  await mockPost("claude", "/__slip", "ok:ORD-FINAL-1:1490");
   const m = await chat(U, () => lineImage(U, "ord-slip-2"));
-  assert.match(m.text, /ได้รับชำระ 1,495 บาท/);
+  assert.match(m.text, /ได้รับชำระ 1,490 บาท/);
   await waitFor(async () => (await stage()) === "online");
   assert.equal(await val(`select s.status from jobs j join sites s on s.id = j.site_id where j.id = $1`, [job]), "live");
   const st = await chat(U, () => lineText(U, "เว็บถึงไหนแล้วคะ"));

@@ -68,3 +68,5 @@ These are simulated buyers, not customers. Use this to find objections and weak 
 Buyers say they would buy **1.0 times** in the first month on average.
 
 100 buyers gave all four price answers. Run founder-pricing's van_westendorp.py on the answers folder.
+
+> หมายเหตุ: ผลนี้มาจากข้อเสนอเดิม (มัดจำ 50%, แพ็ก 1,590–5,990, ค่ารายปี 2,990) ดู `pitch-v1.md` · ข้อเสนอปัจจุบันอยู่ที่ `founder/pitch.md`
