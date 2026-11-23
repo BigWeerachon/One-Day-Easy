@@ -2,6 +2,7 @@ import * as P from "@/lib/portal";
 import * as SE from "@/lib/self-edit";
 import { editHeroAction, editItemsAction, editHoursAction, editFaqAction, undoEditAction } from "@/lib/portal-actions";
 import { liveUrl } from "@/lib/preview";
+import { themeFor, contrast } from "@ode/blocks/themes";
 import ImageInput from "@/components/ImageInput";
 import SubmitButton from "@/components/SubmitButton";
 export const dynamic = "force-dynamic";
@@ -13,8 +14,17 @@ const OK: Record<string, string> = { hero: "บันทึกหน้าแร
 export default async function EditSite({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ err?: string; ok?: string }> }) {
   const { token } = await params; const sp = await searchParams;
   const r = await P.resolvePortal(token);
+  // สีหลักของร้าน (ธีมของเว็บ) · ตัวอักษรบนปุ่มและลิงก์เลือกสีที่อ่านออก (คอนทราสต์ ≥ 4.5)
+  let shop: React.CSSProperties | undefined;
+  if (r.status === "ok" && r.ctx.site) {
+    const t = await SE.editable(r.ctx).then((e) => e && themeFor(e.template, e.config)).catch(() => null);
+    if (t && /^#[0-9a-f]{6}$/i.test(t.primary)) {
+      const onWhite = contrast(t.primary, "#ffffff") >= 4.5;
+      shop = { "--pt-p": t.primary, "--pt-on": onWhite ? "#ffffff" : "#141a2b", "--pt-link": onWhite ? t.primary : "#141a2b" } as React.CSSProperties;
+    }
+  }
   const shell = (body: React.ReactNode) => (
-    <div className="pt-wrap"><header className="pt-top"><div className="pt-logo">One Day <span>Easy</span></div><span className="pt-chip">แก้เว็บของร้าน</span></header>
+    <div className={shop ? "pt-wrap pt-shop" : "pt-wrap"} style={shop}><header className="pt-top"><div className="pt-logo">One Day <span>Easy</span></div><span className="pt-chip">แก้เว็บของร้าน</span></header>
       <div className="pt-bd">{body}</div></div>);
   if (r.status !== "ok") return shell(<div className="pt-card"><h1 className="pt-h">ลิงก์นี้ใช้ไม่ได้แล้ว</h1><p className="pt-sm pt-mut" style={{ marginTop: 6 }}>พิมพ์ &quot;แก้เว็บ&quot; ในแชท LINE ของร้านเพื่อรับลิงก์ใหม่</p></div>);
   const { ctx } = r;
