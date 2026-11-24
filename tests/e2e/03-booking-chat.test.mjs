@@ -31,6 +31,8 @@ test("ลูกค้าใหม่ทักครั้งแรก → ได
 test("ข้อความทั่วไปครั้งถัดไป → บอทคิว/บอทขายไม่ตอบ · Sales Agent รับไปตอบ", async () => {
   const m = await chat(U, () => lineText(U, "แก้ได้กี่รอบคะ"));
   assert.doesNotMatch(m.text, /แพ็กเกจทำเว็บ|วันที่ว่าง|กันที่/);
+  // บันทึกผลของ Agent อาจลงฐานข้อมูลหลังข้อความตอบถึงลูกค้าเล็กน้อย · รอจนเห็นแล้วค่อยนับ
+  await waitFor(async () => (await val(`select count(*)::int from agent_runs where agent = 'sales' and outcome = 'replied'`)) >= 1);
   assert.equal(await val(`select count(*)::int from agent_runs where agent = 'sales' and outcome = 'replied'`), 1);
 });
 
