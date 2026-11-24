@@ -16,6 +16,7 @@ export const PERMS = {
   "system.retry": "ลองงานอัตโนมัติใหม่",
   "team.manage": "จัดการทีมและสิทธิ์",
   "domains.buy": "ซื้อโดเมนใหม่ (มีค่าใช้จ่าย)",
+  "templates.approve": "อนุมัติเทมเพลตให้ใช้กับเว็บลูกค้า",
 } as const;
 export type Perm = keyof typeof PERMS;
 
@@ -31,7 +32,7 @@ export const grantsOf = (role: Role) => GRANTS[role];
 export const PAGE_PERM: Record<string, Perm> = {
   "/": "work.view", "/workflow": "work.view", "/spec": "work.view",
   "/inbox": "clients.view", "/clients": "clients.view",
-  "/builder": "sites.edit", "/queue": "queue.view", "/finance": "finance.view", "/settings": "team.manage",
+  "/builder": "sites.edit", "/templates": "sites.edit", "/queue": "queue.view", "/finance": "finance.view", "/settings": "team.manage",
 };
 export const homeFor = (role: Role) => "/";
 

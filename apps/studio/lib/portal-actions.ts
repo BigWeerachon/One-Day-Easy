@@ -137,3 +137,19 @@ export async function editFaqAction(f: FormData) {
   }, "faq");
 }
 export async function undoEditAction(f: FormData) { await withEdit(f, (ctx, version) => SE.undoSelfEdit(ctx, version), "undo"); }
+
+export async function editBlockAction(f: FormData) {
+  await withEdit(f, (ctx, version) => SE.saveBlock(ctx, {
+    version, block: s(f, "block"), n: Math.min(20, Number(s(f, "n")) || 0),
+    form: { get: (k) => s(f, k), image: async (k) => (await images(f, k, 1))[0] },
+  }), "block");
+}
+export async function editVisibilityAction(f: FormData) {
+  await withEdit(f, (ctx, version) => SE.saveVisibility(ctx, { version, show: f.getAll("show").map(String) }), "visibility");
+}
+export async function editLogoAction(f: FormData) {
+  await withEdit(f, async (ctx, version) => {
+    const [image] = await images(f, "logo", 1);
+    await SE.saveLogo(ctx, { version, image, remove: s(f, "nologo") === "1" });
+  }, "logo");
+}

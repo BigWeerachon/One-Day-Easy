@@ -3,6 +3,7 @@ import { q, one } from "./db";
 import * as S from "./store";
 import { validateBlock, TEMPLATES } from "./blocks";
 import type { PortalCtx } from "./portal";
+import { EDIT_FIELDS, BLOCK_LABEL, hiddenOf, type TemplateSpec } from "@ode/blocks/templates";
 
 // ลูกค้าแก้เว็บเองหลังออนไลน์ (Portal) · แก้ได้เฉพาะเนื้อหา: รูป/ข้อความหน้าแรก การ์ดเมนู/สินค้า/บริการ เวลาเปิด คำถามที่พบบ่อย
 // หน้าตา สี ฟอนต์ และลำดับบล็อกล็อกไว้ · ทุกครั้งที่บันทึกเก็บเวอร์ชันเดิมไว้ ย้อนกลับได้
@@ -17,6 +18,8 @@ const SELF = "ลูกค้า (แก้เอง)";
 export interface Editable {
   siteId: string; version: number; template: string; config: Record<string, unknown>;
   itemBlock: ItemBlock | null; hasHours: boolean; hasFaq: boolean; canUndo: boolean;
+  /** บล็อกของเว็บตามลำดับเทมเพลต · บล็อกบังคับ (ปิดไม่ได้) · บล็อกที่ลูกค้าปิดไว้ */
+  blocks: string[]; required: string[]; hidden: string[]; spec: TemplateSpec | null;
 }
 export type Access = { ok: true; until: string } | { ok: false; reason: "not-live" | "expired"; until?: string };
 
@@ -34,10 +37,13 @@ export async function selfEditAccess(ctx: PortalCtx): Promise<Access> {
 }
 
 export async function editable(ctx: PortalCtx): Promise<Editable | null> {
-  const s = await one<{ id: string; version: number; template: string; config: Record<string, unknown> }>(
-    `select s.id, s.version, s.template, s.config from jobs j join sites s on s.id = j.site_id where j.id = $1`, [ctx.jobId]);
+  const s = await one<{ id: string; version: number; template: string; config: Record<string, unknown>; spec: TemplateSpec | null }>(
+    `select s.id, s.version, s.template, s.config,
+       case when tv.id is null then null else tv.spec || jsonb_build_object('key', tv.key, 'version', tv.version, 'name', tv.name, 'business', tv.business) end spec
+     from jobs j join sites s on s.id = j.site_id left join template_versions tv on tv.id = s.template_version_id where j.id = $1`, [ctx.jobId]);
   if (!s) return null;
-  const tpl = TEMPLATES.find((t) => t.id === s.template);
+  const legacy = TEMPLATES.find((t) => t.id === s.template);
+  const tpl = s.spec ? { blocks: s.spec.blocks.map((b) => b.type), required: s.spec.required } : legacy;
   const has = (b: string) => b in s.config || !!tpl?.blocks.includes(b);
   // ย้อนได้เมื่อการแก้ครั้งล่าสุดเป็นของลูกค้าเอง (แถวใน site_versions = ค่าก่อนแก้ · actor = คนที่แก้)
   const canUndo = (await one<{ actor: string }>(`select actor from site_versions where site_id = $1 and version = $2`, [s.id, s.version - 1]))?.actor === SELF;
@@ -45,6 +51,7 @@ export async function editable(ctx: PortalCtx): Promise<Editable | null> {
     siteId: s.id, version: s.version, template: s.template, config: s.config,
     itemBlock: ITEM_BLOCKS.find((b) => b in s.config) ?? ITEM_BLOCKS.find((b) => tpl?.blocks.includes(b)) ?? null,
     hasHours: has("hours"), hasFaq: has("faq"), canUndo,
+    blocks: tpl?.blocks ?? [], required: tpl?.required ?? [], hidden: hiddenOf(s.config), spec: s.spec,
   };
 }
 
@@ -159,4 +166,80 @@ export async function undoSelfEdit(ctx: PortalCtx, version: number) {
   const e = await guard(ctx, version);
   if (!e.canUndo) throw new Error("ไม่มีการแก้ของคุณให้ย้อนกลับ");
   await S.rollbackSite(e.siteId, "ลูกค้า (ย้อนกลับ)");
+}
+
+// ---------------------------------------------------------------- ทุกบล็อก (ตามช่องที่บล็อกประกาศไว้ใน EDIT_FIELDS)
+/** ค่าจากฟอร์มของบล็อกหนึ่ง: top_<key> · <key><i> ต่อแถว · del<i> ลบแถว · รูปใหม่ <key>_new<i> */
+export interface BlockForm { get(k: string): string; image(k: string): Promise<Img> }
+export async function saveBlock(ctx: PortalCtx, f: { version: number; block: string; n: number; form: BlockForm }) {
+  const e = await guard(ctx, f.version);
+  const spec = EDIT_FIELDS[f.block];
+  if (!spec || !e.blocks.includes(f.block)) throw new Error("แก้ส่วนนี้เองไม่ได้");
+  const label = BLOCK_LABEL[f.block] ?? f.block;
+  const read = async (fd: { key: string; label: string; kind: string; max?: number; min?: number; maxNum?: number; required?: boolean }, name: string, newName: string) => {
+    const raw = f.form.get(name);
+    if (fd.kind === "image") {
+      const img = await f.form.image(newName);
+      return img ? await storeImage(ctx, img) : await ownImage(ctx, raw);
+    }
+    if (fd.kind === "number") {
+      if (!raw) return undefined;
+      const n = Number(raw.replace(/[,\s฿]|บาท/g, ""));
+      if (!Number.isFinite(n) || n < (fd.min ?? 0) || n > (fd.maxNum ?? 1_000_000)) throw new Error(`${fd.label}: ต้องเป็นตัวเลข ${fd.min ?? 0}–${fd.maxNum ?? 1_000_000}`);
+      return n;
+    }
+    const t = fd.kind === "longtext" ? raw.trim() : raw.replace(/\s+/g, " ").trim();
+    if (fd.max && t.length > fd.max) throw new Error(`${fd.label}ยาวเกิน ${fd.max} ตัวอักษร`);
+    return t || undefined;
+  };
+  const cur = (e.config[f.block] ?? {}) as Record<string, unknown>;
+  const next: Record<string, unknown> = { ...cur };
+  for (const fd of spec.top ?? []) {
+    const v = await read(fd, `top_${fd.key}`, `top_${fd.key}_new`);
+    if (v === undefined) { if (fd.required) throw new Error(`${label}: ต้องใส่${fd.label}`); delete next[fd.key]; } else next[fd.key] = v;
+  }
+  if (spec.list) {
+    const old = ((cur[spec.list.key] ?? []) as Record<string, unknown>[]);
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 0; i < Math.min(f.n, spec.list.max + 3); i++) {
+      if (f.form.get(`del${i}`) === "1") continue;
+      const row: Record<string, unknown> = i < old.length ? { ...old[i] } : {};
+      let any = false;
+      for (const fd of spec.fields) {
+        const v = await read(fd, `${fd.key}${i}`, `${fd.key}_new${i}`);
+        if (v !== undefined) { row[fd.key] = v; any = true; } else delete row[fd.key];
+      }
+      if (!any) continue; // แถวว่าง
+      const miss = spec.fields.find((fd) => fd.required && row[fd.key] === undefined);
+      if (miss) throw new Error(`${spec.list.label}ที่ ${rows.length + 1}: ต้องใส่${miss.label}`);
+      rows.push(row);
+    }
+    if (rows.length > spec.list.max) throw new Error(`${label}มีได้ไม่เกิน ${spec.list.max} ${spec.list.label}`);
+    next[spec.list.key] = rows;
+  } else {
+    for (const fd of spec.fields) {
+      const v = await read(fd, fd.key, `${fd.key}_new`);
+      if (v === undefined) { if (fd.required) throw new Error(`${label}: ต้องใส่${fd.label}`); delete next[fd.key]; } else next[fd.key] = v;
+    }
+  }
+  await save(e, ctx, f.block, next, `แก้${label}`);
+}
+
+/** เปิด/ปิดบล็อก · บล็อกบังคับของเทมเพลตปิดไม่ได้ */
+export async function saveVisibility(ctx: PortalCtx, f: { version: number; show: string[] }) {
+  const e = await guard(ctx, f.version);
+  const optional = e.blocks.filter((b) => !e.required.includes(b));
+  const hidden = optional.filter((b) => !f.show.includes(b));
+  await S.saveSiteConfig(e.siteId, { ...e.config, hidden }, SELF, hidden.length ? `ซ่อน ${hidden.map((b) => BLOCK_LABEL[b] ?? b).join(", ")}` : "แสดงทุกส่วน");
+  await q(`update clients set last_contact_at = now() where id = $1`, [ctx.clientId]);
+}
+
+/** โลโก้ร้าน (แสดงมุมบนของเว็บ) */
+export async function saveLogo(ctx: PortalCtx, f: { version: number; image?: Img; remove?: boolean }) {
+  const e = await guard(ctx, f.version);
+  const brand = { ...((e.config.brand ?? {}) as Record<string, unknown>) };
+  if (f.image) brand.logo = await storeImage(ctx, f.image);
+  else if (f.remove) delete brand.logo;
+  else throw new Error("เลือกรูปโลโก้ก่อน");
+  await S.saveSiteConfig(e.siteId, { ...e.config, brand }, SELF, f.image ? "เปลี่ยนโลโก้" : "เอาโลโก้ออก");
 }
