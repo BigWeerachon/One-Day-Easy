@@ -1,5 +1,6 @@
 import "server-only";
 import type { SiteRow } from "./sites";
+import { staleCache } from "./stale-cache";
 
 // เว็บร้านที่เชื่อมกับระบบร้าน Sabai: เมนู ราคา และของหมดมาจาก POS · ลูกค้าสั่งจากเว็บ ออเดอร์เข้าจอครัว (ช่องทาง "เว็บไซต์" ไม่มี GP)
 // คีย์ของสาขาอยู่ในฐานข้อมูลฝั่งเรา Engine เป็นคนเรียก Sabai เบราว์เซอร์ไม่เห็นคีย์
@@ -7,26 +8,22 @@ import type { SiteRow } from "./sites";
 export interface SabaiItem { id: string; name: string; description: string | null; imageUrl: string | null; price: string; available: boolean; category: string }
 export interface SabaiMenu { shop: string; branch: string; ordering: boolean; items: SabaiItem[] }
 
-const TTL = 60_000;
-const cache = new Map<string, { at: number; menu: SabaiMenu | null }>();
+// เมนูจาก Sabai: ค่าใหม่ทุก 1 นาที · Sabai ล่ม → ใช้เมนูชุดล่าสุดได้อีก 1 วัน (แล้วค่อยกลับไปใช้เมนูที่บันทึกในเว็บ)
+const cache = staleCache<SabaiMenu>({ ttl: 60_000, staleFor: 86_400_000, max: 2000 });
 
 export const linked = (s: SiteRow) => !!(s.sabaiApi && s.sabaiKey);
 
 /** เมนูจาก Sabai (แคช 1 นาที) · เชื่อมไม่ได้ = null แล้วเว็บใช้เมนูที่บันทึกไว้แทน เว็บไม่ล่ม */
 export async function sabaiMenu(s: SiteRow): Promise<SabaiMenu | null> {
   if (!linked(s)) return null;
-  const hit = cache.get(s.id);
-  if (hit && Date.now() - hit.at < TTL) return hit.menu;
-  let menu: SabaiMenu | null = null;
   try {
-    const r = await fetch(`${s.sabaiApi}/v1/public/menu`, { headers: { "x-website-key": s.sabaiKey! }, signal: AbortSignal.timeout(4000), cache: "no-store" });
-    if (r.ok) {
+    return await cache.get(s.id, async () => {
+      const r = await fetch(`${s.sabaiApi}/v1/public/menu`, { headers: { "x-website-key": s.sabaiKey! }, signal: AbortSignal.timeout(4000), cache: "no-store" });
+      if (!r.ok) throw new Error(`sabai menu ${r.status}`);
       const j = (await r.json()) as { shop: string; branch: string; ordering: boolean; categories: { name: string; items: Omit<SabaiItem, "category">[] }[] };
-      menu = { shop: j.shop, branch: j.branch, ordering: j.ordering, items: j.categories.flatMap((c) => c.items.map((i) => ({ ...i, category: c.name }))) };
-    }
-  } catch { /* ใช้เมนูที่บันทึกไว้ */ }
-  cache.set(s.id, { at: Date.now(), menu });
-  return menu;
+      return { shop: j.shop, branch: j.branch, ordering: j.ordering, items: j.categories.flatMap((c) => c.items.map((i) => ({ ...i, category: c.name }))) };
+    });
+  } catch { return null; } // ไม่เคยได้เมนูเลย → ใช้เมนูที่บันทึกในเว็บ
 }
 
 export interface OrderInput { customerName: string; phone: string; note?: string; pickupAt?: string; externalRef: string; items: { menuItemId: string; qty: number }[] }
@@ -39,7 +36,7 @@ export async function sabaiOrder(s: SiteRow, o: OrderInput): Promise<{ ok: true;
       method: "POST", headers: { "x-website-key": s.sabaiKey!, "content-type": "application/json" }, body: JSON.stringify(o), signal: AbortSignal.timeout(8000),
     });
     const j = (await r.json().catch(() => ({}))) as { orderNo?: string; total?: string; error?: { code?: string; message?: string } };
-    if (r.ok && j.orderNo) { cache.delete(s.id); return { ok: true, orderNo: j.orderNo, total: j.total ?? "" }; }
+    if (r.ok && j.orderNo) { return { ok: true, orderNo: j.orderNo, total: j.total ?? "" }; }
     const code = j.error?.code;
     return { ok: false, error: code === "MENU_ITEM_SOLD_OUT" ? "มีเมนูที่เพิ่งหมด ลองเลือกใหม่อีกครั้ง"
       : code === "RATE_LIMITED" ? "ตอนนี้ออเดอร์เยอะ ลองอีกครั้งในอีกสักครู่ หรือโทรสั่งที่ร้าน"
