@@ -59,3 +59,13 @@ test("ทุกชุดสีมีคู่สว่าง/มืด · ตั
 test("เทมเพลตชุดสีใหม่ + Google Sans ผ่านการตรวจ", () => {
   for (const palette of ["apple", "bronze-dark", "emerald"]) assert.ok(checksPass(checkTemplate({ ...base, palette, fonts: "google-sans" })), palette);
 });
+
+test("ที่พัก/แคมป์: ต้องมีบล็อกห้องพัก · เทมเพลต H1 ผ่านการตรวจ · ข้อมูลตัวอย่างครบ 3 ชุด", () => {
+  const h1: TemplateSpec = { key: "H1", version: 1, name: "บ้านพักริมน้ำ", business: "hotel_camp", palette: "bronze", fonts: "google-sans", radius: 12,
+    blocks: ["hero:cover", "rooms:cards", "gallery:strip", "reviews:quote", "faq:accordion", "hours:default", "line:default", "map:default", "promptpay:default"].map((x) => { const [type, variant] = x.split(":"); return { type, variant }; }),
+    required: ["hero", "rooms", "hours", "line", "map"] };
+  assert.ok(checksPass(checkTemplate(h1)), JSON.stringify(checkTemplate(h1).filter((x) => !x.ok)));
+  const noRooms = checkTemplate({ ...h1, blocks: h1.blocks.filter((b) => b.type !== "rooms"), required: h1.required.filter((t) => t !== "rooms") });
+  assert.ok(noRooms.some((x) => !x.ok && /บังคับครบ/.test(x.name)));
+  assert.equal(visibleBlocks(h1, sampleConfig("hotel_camp", "sample")).find((b) => b.type === "rooms")?.variant, "cards");
+});
