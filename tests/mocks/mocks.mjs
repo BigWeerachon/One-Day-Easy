@@ -23,6 +23,8 @@ export function lineMock() {
     const b = await readBody(req);
     if (control(s, req, res, b)) return;
     if (req.url.includes("/content")) { res.setHeader("content-type", "image/png"); return res.end(PNG); }
+    if (req.url === "/v2/bot/info") return json(res, 200, { displayName: "One Day Easy", basicId: "@onedayeasy" });
+    if (req.url === "/v2/bot/channel/webhook/endpoint") return json(res, 200, { endpoint: `${process.env.STUDIO_URL}/api/line/webhook`, active: true });
     if (req.url.startsWith("/v2/bot/profile/")) return json(res, 200, { displayName: "คุณทดสอบ LINE" });
     s.log.push({ url: req.url, auth: req.headers.authorization, retryKey: req.headers["x-line-retry-key"], body: b ? JSON.parse(b) : null, mode: s.mode });
     if (s.mode === "500") return json(res, 500, { message: "internal" });
@@ -44,6 +46,7 @@ export function claudeMock() {
     if (control(s, req, res, b)) return;
     if (req.url === "/__review") { s.review = b || "pass"; return json(res, 200, {}); }
     if (req.url === "/__slip") { const [m, r, a] = b.split(":"); s.slip = { mode: m || "ok", ref: r || null, amount: a ? Number(a) : null }; return json(res, 200, {}); }
+    if (req.url.startsWith("/v1/models")) return json(res, 200, { data: [] });
     const body = JSON.parse(b || "{}");
     s.log.push({ url: req.url, beta: req.headers["anthropic-beta"], key: req.headers["x-api-key"] ?? req.headers.authorization?.replace(/^Bearer /, ""), body });
     if (s.mode === "401") return json(res, 401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } });
