@@ -16,8 +16,9 @@ after(async () => { await closeBrowser(); await closeDb(); });
 test("Sales Agent ตอบคำถามที่ปุ่มตอบไม่ได้ · ข้อความถูกทำเป็นอ่านแล้ว", async () => {
   const m = await chat(U, () => lineText(U, "แก้ได้กี่รอบคะ", "sales-q1"));
   assert.match(m.text, /แก้ฟรี 2 รอบ/);
-  assert.equal(await val(`select read_at is not null from messages where external_id = 'line:sales-q1'`), true);
-  assert.equal(await val(`select outcome from agent_runs where client_id = $1 and agent = 'sales' order by id desc limit 1`, [client]), "replied");
+  // LINE push ออกไปก่อนบันทึก read_at/agent_runs · รอให้เขียนเสร็จ
+  await waitFor(async () => (await val(`select read_at is not null from messages where external_id = 'line:sales-q1'`)) === true);
+  await waitFor(async () => (await val(`select outcome from agent_runs where client_id = $1 and agent = 'sales' order by id desc limit 1`, [client])) === "replied");
 });
 
 test("ขอส่วนลด → Sales Agent ไม่ตอบ ส่งต่อให้คน (ข้อความค้างในกล่องข้อความ)", async () => {
