@@ -7,6 +7,7 @@ import { draftForJob, shopOf, badImage, pickTemplate, type Design } from "./draf
 import { FONTS, sanitizeTheme } from "@ode/blocks/themes";
 import { previewUrl } from "./preview";
 import { notify } from "./notify";
+import { checkSalesReply, sameOriginOnly } from "./agent-guard";
 
 // ทีม Agent ของระบบ (ทุกตัวใช้ Claude · บันทึกทุกครั้งใน agent_runs)
 //   Sales   ตอบคำถามในแชทที่ปุ่มตอบไม่ได้ · ส่งต่อคนเมื่อเกินขอบเขต
@@ -100,7 +101,9 @@ export async function techCheck(siteId: string): Promise<TechResult> {
   if (!/<h1[\s>]/.test(html)) problems.push("ไม่มีหัวข้อหลัก (h1)");
   if (html.length > 1_500_000) problems.push(`หน้าใหญ่เกินไป (${Math.round(html.length / 1024)} KB)`);
   const origin = new URL(url).origin;
-  const imgs = [...new Set([...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&")))].slice(0, 40);
+  const all = [...new Set([...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&")))];
+  const imgs = sameOriginOnly(all, origin).slice(0, 40);
+  if (all.length > imgs.length) problems.push(`มีรูปจากเว็บภายนอก ${all.length - imgs.length} รูป (ต้องเป็นรูปของลูกค้าที่อัปโหลดเท่านั้น)`);
   for (const src of imgs) {
     try {
       const r = await fetch(src.startsWith("http") ? src : origin + src, { signal: AbortSignal.timeout(15_000) });
@@ -200,16 +203,27 @@ export async function customerAnswered(clientId: string, text: string) {
 
 // ---------- Sales ----------
 const SALES_DAILY_LIMIT = 20;
+/** เพดานรวมทั้งระบบต่อวัน (กันค่า API บานเมื่อมีคนยิงแชทจำนวนมาก) */
+const SALES_GLOBAL_DAILY_LIMIT = Number(process.env.SALES_GLOBAL_DAILY_LIMIT ?? 500);
 /** ตอบคำถามที่ปุ่มตอบไม่ได้ · คืน true ถ้า Agent ตอบแล้ว (false = ปล่อยให้ทีมตอบ) */
 export async function salesAnswer(clientId: string, text: string): Promise<boolean> {
   if (!agentsEnabled() || (process.env.SALES_AGENT ?? "on") === "off") return false;
   if (text.trim().length < 2 || text.length > 1000) return false;
   const n = await one<{ n: number }>(`select count(*)::int n from agent_runs where client_id = $1 and agent = 'sales' and created_at > now() - interval '1 day'`, [clientId]);
   if ((n?.n ?? 0) >= SALES_DAILY_LIMIT) return false;
-  const { data, usage } = await salesReply({ facts: await salesFacts(), history: (await S.listMessages(clientId)).map((m) => ({ from: m.from, text: m.text })), message: text });
+  const all = await one<{ n: number }>(`select count(*)::int n from agent_runs where agent = 'sales' and created_at > now() - interval '1 day'`);
+  if ((all?.n ?? 0) >= SALES_GLOBAL_DAILY_LIMIT) return false;
+  const facts = await salesFacts();
+  const { data, usage } = await salesReply({ facts, history: (await S.listMessages(clientId)).map((m) => ({ from: m.from, text: m.text })), message: text });
   const reply = data.reply.trim();
   if (data.action === "handoff" || !reply) {
     await logRun("sales", "handoff", { clientId, detail: { reason: data.reason }, usage });
+    return false;
+  }
+  // ด่านสุดท้ายก่อนถึงลูกค้า: ราคาแต่ง ลิงก์นอก ส่วนลด หรือเผยคำสั่งภายใน → ไม่ส่ง ให้คนตอบแทน
+  const guard = checkSalesReply(reply, facts);
+  if (!guard.ok) {
+    await logRun("sales", "blocked", { clientId, detail: { reason: guard.reason }, usage });
     return false;
   }
   await S.sendSystemMessage(clientId, reply.slice(0, 1000));
@@ -222,7 +236,8 @@ async function salesFacts() {
   const { FREE_EDITS } = await import("./portal");
   const b = (s: number) => `${(s / 100).toLocaleString("th-TH")} บาท`;
   return [
-    "บริการ: ทำเว็บไซต์ร้านอาหารและคาเฟ่ ทุกขั้นตอนทำผ่านแชท LINE นี้",
+    "บริการ: ทำเว็บไซต์ร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถมือสอง ที่พัก/แคมป์) ทุกขั้นตอนทำผ่านแชท LINE นี้",
+    "งานตามโจทย์ (เว็บไซต์ออกแบบเฉพาะ งานหน่วยงานภาครัฐ ระบบงาน): ราคาตามขอบเขตงาน ทีมงานสรุปขอบเขตและราคาให้ก่อนเริ่ม · ถ้าลูกค้าถามเรื่องนี้ให้ handoff เพื่อให้ทีมคุยรายละเอียด",
     "ราคา:", ...items.map((i) => `- ${i.name}: ${b(i.price)}${i.recurring ? " ต่อปี" : ""} (${i.code})`),
     depositPercent() ? `มัดจำตอนยืนยันสั่งทำ: ${depositPercent()}% ของราคาแพ็ก ส่วนที่เหลือชำระเมื่ออนุมัติเว็บ` : "ไม่มีมัดจำ: ทำตัวอย่างเว็บให้ดูบนที่อยู่ฟรีก่อน ถ้าถูกใจค่อยชำระเต็มจำนวนตอนอนุมัติ แล้วเว็บขึ้นออนไลน์ (และผูกโดเมนจริงถ้าเลือกแพ็กที่รวมโดเมน)",
     "ค่าดูแลรายปี (รายการที่ต่อปี) ไม่บังคับต่อ ลูกค้าเลือกต่อหรือไม่ก็ได้",
