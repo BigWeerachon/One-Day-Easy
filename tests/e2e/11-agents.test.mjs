@@ -125,3 +125,24 @@ test("Ops: สรุปงานรายวันถึง Owner วันล�
 });
 
 test("cron ops ต้องมี secret", async () => { assert.equal((await cron("ops", false)).status, 401); });
+
+test("ลูกค้าเต็นท์รถ: Agent ร่างด้วยเทมเพลต D1 ที่อนุมัติแล้ว (ไม่ใช่เทมเพลตอาหาร) · ขาดรายการรถ → ถามลูกค้า", async () => {
+  const V = "Ue2ecardealer0000000000000000001";
+  await chat(V, () => lineText(V, "สวัสดีครับ"));
+  const c = await val(`select client_id from contacts where value = $1`, [V]);
+  const j = await val(`select id from jobs where client_id = $1`, [c]);
+  await sql(`update clients set name = 'เต็นท์รถทดสอบ', kind = 'เต็นท์รถมือสอง', package = 'Basic', phone = '0812345678' where id = $1`, [c]);
+  await sql(`update jobs set stage = 'intake', checklist_done = true, pdpa_consent = true where id = $1`, [j]);
+  await sql(`update jobs set stage = 'template' where id = $1`, [j]);
+  await mockPost("claude", "/__review", "pass");
+  const p = await loginAs("builder");
+  await p.goto(`${URLS.studio}/clients/${c}`);
+  await act(p, p.getByRole("button", { name: "ให้ Agent ทำต่อ" }));
+  const s = (await sql(`select s.template, tv.key, tv.status from jobs jb join sites s on s.id = jb.site_id left join template_versions tv on tv.id = s.template_version_id where jb.id = $1`, [j]))[0];
+  assert.equal(s.template, "D1");
+  assert.equal(s.key, "D1");
+  assert.equal(s.status, "approved");
+  assert.match(await val(`select detail->>'summary' from agent_runs where job_id = $1 and agent = 'design' order by id desc limit 1`, [j]), /D1/);
+  assert.equal(await val(`select agent_status from jobs where id = $1`, [j]), "waiting_customer");
+  assert.match((await linePushes(V)).at(-1).text, /รายการรถ/);
+});

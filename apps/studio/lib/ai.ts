@@ -152,14 +152,14 @@ export const DraftSchema = z.object({
   theme_primary: z.string().nullable(),
   ops: z.array(z.object({ block: z.string(), data_json: z.string() })),
 });
-const DRAFT_SYSTEM = `คุณร่างเว็บไซต์ฉบับแรกให้ร้านอาหารและคาเฟ่ในไทย สำหรับทีม One Day Easy
+const DRAFT_SYSTEM = `คุณร่างเว็บไซต์ฉบับแรกให้ร้านค้าในไทย (ร้านอาหาร คาเฟ่ เต็นท์รถมือสอง ที่พัก/แคมป์) สำหรับทีม One Day Easy
 เว็บเก็บเป็น JSON แยกตามบล็อก ใช้ได้เฉพาะบล็อกและฟิลด์ตาม schema นี้:
 ${SCHEMA_DOC}
 
 กติกา:
 - ตอบเป็น ops: หนึ่ง op ต่อหนึ่งบล็อก (block = ชื่อบล็อก, data_json = JSON object ของบล็อกนั้นแบบเต็ม)
 - ร่างทุกบล็อกในเทมเพลตที่มีข้อมูลพอ · บล็อกที่ไม่มีข้อมูลจริงให้ข้าม ห้ามแต่งขึ้นเอง
-- ห้ามแต่งข้อมูลจริงของร้าน: ราคา เมนู เบอร์โทร ที่อยู่ เวลาเปิด LINE ID คะแนนรีวิว · ใช้เฉพาะที่อยู่ใน <shop>
+- ห้ามแต่งข้อมูลจริงของร้าน: ราคา เมนู รายการรถ ห้องพัก เบอร์โทร ที่อยู่ เวลาเปิด LINE ID คะแนนรีวิว · ใช้เฉพาะที่อยู่ใน <shop>
 - เขียนได้เอง: หัวข้อและคำโปรยของ hero, คำอธิบายสั้น, alt ของรูป, FAQ ที่ตอบได้จากข้อมูลใน <shop> เท่านั้น
 - รูปลูกค้า: แต่ละรูปมีรหัส file:<id> กำกับ · ใช้รหัสนี้ในฟิลด์รูป (hero.image, menu.items[].img, gallery.images[].src) เลือกรูปที่เหมาะกับตำแหน่ง · gallery ต้องมี 4–12 รูปและทุกรูปมี alt ถ้ารูปไม่ถึง 4 ให้ข้าม gallery
 - hours: days/open/close ใส่เมื่อแยกได้ชัดจากเวลาเปิดที่ให้มา (open/close รูปแบบ HH:MM)
@@ -196,7 +196,7 @@ export const ReviewSchema = z.object({
   issues: z.array(z.object({ severity: z.enum(["block", "minor"]), block: z.string(), problem: z.string(), fix: z.string() })),
   missing_from_customer: z.array(z.string()),
 });
-const REVIEW_SYSTEM = `คุณเป็นผู้ตรวจคุณภาพ (QA) ของ One Day Easy ตรวจเว็บร่างของร้านอาหาร/คาเฟ่ก่อนส่งให้ลูกค้าตรวจ
+const REVIEW_SYSTEM = `คุณเป็นผู้ตรวจคุณภาพ (QA) ของ One Day Easy ตรวจเว็บร่างของร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถ ที่พัก)ก่อนส่งให้ลูกค้าตรวจ
 คุณได้รับ: ข้อมูลจริงที่ลูกค้าให้ (<shop>), คำขอแก้ของลูกค้า (ถ้ามี), เนื้อหาเว็บ (<config>) และรูปที่ใช้ในเว็บ
 
 ตรวจตามนี้:
