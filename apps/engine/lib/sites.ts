@@ -23,6 +23,12 @@ const cache = staleCache<SiteRow | null>({
 
 export const normalizeHost = (h: string | null) => (h ?? "").toLowerCase().split(":")[0].replace(/^www\./, "").replace(/\.$/, "");
 
+/** โดเมนของบริษัท (หน้าขายบริการ) · ตั้งใน Vercel: MARKETING_HOST=onedayeasy.com,www.onedayeasy.com */
+export const isMarketingHost = (h: string | null) => {
+  const host = normalizeHost(h);
+  return !!host && (process.env.MARKETING_HOST ?? "").split(",").map((x) => normalizeHost(x.trim())).filter(Boolean).includes(host);
+};
+
 /** เว็บจริง: ตามโดเมน · แสดงเฉพาะเว็บที่ขึ้นออนไลน์แล้ว (live/down) ไม่แสดงร่าง */
 export async function siteByHost(hostHeader: string | null): Promise<SiteRow | null> {
   let host = normalizeHost(hostHeader);
