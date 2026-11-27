@@ -47,13 +47,29 @@ export const PALETTES: Palette[] = [
   { id: "matcha", name: "มัทฉะ", primary: "#4f7a3a", accent: "#e6c27a", bg: "#f7f5ee", surface: "#ffffff", text: "#25301c" },
   { id: "ocean", name: "ทะเล", primary: "#0f766e", accent: "#f2c14e", bg: "#f3faf8", surface: "#ffffff", text: "#12302c" },
   { id: "night", name: "บาร์กลางคืน", primary: "#b45309", accent: "#c9a24a", bg: "#0e0e10", surface: "#18181b", text: "#f2efe8", dark: true },
+  // ชุดใหม่จาก Design System (docs/DESIGN-TOKENS.md + tokens-submission) · ทุกชุดมีคู่สว่าง/มืด
+  { id: "apple", name: "Apple", primary: "#0071e3", accent: "#ff9f0a", bg: "#f5f5f7", surface: "#ffffff", text: "#1d1d1f" },
+  { id: "apple-dark", name: "Apple (มืด)", primary: "#0071e3", accent: "#ff9f0a", bg: "#000000", surface: "#1c1c1e", text: "#f5f5f7", dark: true },
+  { id: "emerald", name: "มรกตทอง", primary: "#0f4a35", accent: "#d4af37", bg: "#f8f6f0", surface: "#ffffff", text: "#14221c" },
+  { id: "emerald-dark", name: "มรกตทอง (มืด)", primary: "#0f4a35", accent: "#d4af37", bg: "#07140f", surface: "#0f1f19", text: "#f3efe3", dark: true },
+  { id: "bronze", name: "ทองบรอนซ์", primary: "#6b3a1f", accent: "#b8925a", bg: "#f8f4ef", surface: "#ffffff", text: "#1e140e" },
+  { id: "bronze-dark", name: "ทองบรอนซ์ (มืด)", primary: "#6b3a1f", accent: "#b8925a", bg: "#12100e", surface: "#1c1916", text: "#f3ebe3", dark: true },
+  { id: "chili-dark", name: "พริกแดง (มืด)", primary: "#c8102e", accent: "#fcc419", bg: "#140f0d", surface: "#1f1917", text: "#f7efe8", dark: true },
+  { id: "coffee-dark", name: "กาแฟคั่ว (มืด)", primary: "#7a4a2a", accent: "#e9b872", bg: "#130d09", surface: "#1e1712", text: "#f5ece2", dark: true },
+  { id: "basil-dark", name: "ใบโหระพา (มืด)", primary: "#2f6b3a", accent: "#f2c14e", bg: "#0c120d", surface: "#161e17", text: "#ecf3ea", dark: true },
+  { id: "matcha-dark", name: "มัทฉะ (มืด)", primary: "#4f7a3a", accent: "#e6c27a", bg: "#0f120c", surface: "#1a1e16", text: "#eff2e6", dark: true },
+  { id: "ocean-dark", name: "ทะเล (มืด)", primary: "#0f766e", accent: "#f2c14e", bg: "#08110f", surface: "#121c1a", text: "#e8f5f2", dark: true },
+  { id: "night-light", name: "บาร์กลางคืน (สว่าง)", primary: "#b45309", accent: "#c9a24a", bg: "#faf7f2", surface: "#ffffff", text: "#1f1a14" },
 ];
+/** คู่สว่าง ↔ มืดของแต่ละชุด (เตรียมรองรับโหมดมืดอัตโนมัติ) */
+export const PALETTE_PAIR = (id: string) => (id.endsWith("-dark") ? id.slice(0, -5) : id === "night" ? "night-light" : id === "night-light" ? "night" : `${id}-dark`);
 export const FONT_PAIRS = [
   { id: "classic", name: "อ่านง่าย (Sarabun + Prompt)", font: "Sarabun", heading: "Prompt" },
   { id: "bold", name: "ตัวหนาชัด (Sarabun + Kanit)", font: "Sarabun", heading: "Kanit" },
   { id: "modern", name: "ทันสมัย (IBM Plex + Kanit)", font: "IBM Plex Sans Thai", heading: "Kanit" },
   { id: "friendly", name: "เป็นกันเอง (Mitr)", font: "Mitr", heading: "Mitr" },
   { id: "story", name: "มีเรื่องเล่า (Sarabun + Chonburi)", font: "Sarabun", heading: "Chonburi" },
+  { id: "google-sans", name: "Google Sans (ไทยใช้ IBM Plex)", font: "Google Sans", heading: "Google Sans" },
 ] as const;
 
 export interface TemplateBlock { type: string; variant: string }

@@ -14,7 +14,7 @@ export const THEMES: Record<string, Theme> = {
   T10: { primary: "#2563eb", accent: "#f97316", bg: "#f8fafc", surface: "#ffffff", text: "#0f172a", font: F("IBM Plex Sans Thai"), heading: F("Prompt"), radius: 16 },
 };
 // ค่าที่ปรับได้ต่อเว็บ (config.theme) · Design Agent ตั้งให้จากภาพ ref และรูปร้าน · ค่าที่ไม่ผ่านการตรวจจะใช้ของเทมเพลตแทน
-export const FONTS = ["IBM Plex Sans Thai", "Sarabun", "Kanit", "Prompt", "Mitr", "Chonburi"] as const; // ต้องตรงกับที่ Engine โหลดไว้
+export const FONTS = ["IBM Plex Sans Thai", "Sarabun", "Kanit", "Prompt", "Mitr", "Chonburi", "Google Sans"] as const; // ต้องตรงกับที่ Engine โหลดไว้
 export interface ThemeOverride { primary?: string; accent?: string; bg?: string; surface?: string; text?: string; heading?: string; font?: string; radius?: number }
 const HEX = /^#[0-9a-f]{6}$/i;
 const lum = (hex: string) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
