@@ -21,7 +21,7 @@ const env = {
   LINE_CHANNEL_SECRET: "e2e-line-secret", LINE_CHANNEL_ACCESS_TOKEN: "e2e-line-token", CRON_SECRET: "e2e-cron-secret", TICK_ON_REQUEST: "off", SITE_CACHE_MS: "0",
   LINE_API_BASE: `http://127.0.0.1:${P.line}`, LINE_DATA_API_BASE: `http://127.0.0.1:${P.line}`,
   ANTHROPIC_API_KEY: "e2e-anthropic-key", ANTHROPIC_BASE_URL: `http://127.0.0.1:${P.claude}`,
-  VERCEL_TOKEN: "vtok", VERCEL_TEAM_ID: "team_e2e", ENGINE_PROJECT_ID: "engine-e2e", VERCEL_API_BASE: `http://127.0.0.1:${P.vercel}`, PLATFORM_DOMAIN: "onedayeasy.app",
+  VERCEL_TOKEN: "vtok", VERCEL_TEAM_ID: "team_e2e", ENGINE_PROJECT_ID: "engine-e2e", VERCEL_API_BASE: `http://127.0.0.1:${P.vercel}`, PLATFORM_DOMAIN: "onedayeasy.app", MARKETING_HOST: "onedayeasy-e2e.com", LINE_OA_ID: "@onedayeasy",
   DOMAIN_SSL_PROBE: "off", LINE_ALLOW_HTTP_IMAGES: "1", ORDER_DEPOSIT_PERCENT: "0",
   RESEND_API_KEY: "e2e-resend-key", EMAIL_FROM: "Studio <noti@e2e.test>", EMAIL_API_BASE: `http://127.0.0.1:${P.email}`,
   PROMPTPAY_ID: "0812345678", SHOP_RECEIVER_NAMES: "บจก. วันเดย์ อีซี่", SHOP_RECEIVER_ACCOUNTS: "123-4-56789-0", SLIP_AUTO_APPROVE: "on", SLIP_MAX_AGE_DAYS: "3",

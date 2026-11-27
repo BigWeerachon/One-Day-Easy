@@ -68,7 +68,7 @@ export default async function Site({ site, fileQuery = "", orderHref, sellHref }
       {sellHref ? <a className="cta" href={sellHref}>ส่งข้อมูลรถ</a> : lineUrl ? <a className="cta" href={lineUrl}>ส่งข้อมูลทาง LINE</a> : null}</Section>,
     sets: () => <Section id="sets" title="ชุดคุ้มค่า" alt><div className="grid">{arr<Any>(c.sets.items).map((m, i) => (
       <div className="card item" key={i}><b>{str(m.name)}</b><div className="meta">สำหรับ {num(m.for) ?? "-"} คน</div><div className="row"><span className="price">{thb(num(m.price))}</span>{num(m.was) ? <s className="meta">{thb(num(m.was))}</s> : null}</div></div>))}</div></Section>,
-    rooms: () => <Section id="rooms" title="ห้องพัก"><div className="grid">{arr<Any>(c.rooms.items).map((m, i) => (
+    rooms: () => <Section id="rooms" title="ห้องพัก"><div className={variant("rooms") === "list" ? "vlist" : "grid"}>{arr<Any>(c.rooms.items).map((m, i) => (
       <div className="card item" key={i}><Img s={arr(m.img)[0]} alt={str(m.name)} q={fileQuery} /><b>{str(m.name)}</b><div className="row"><span className="meta">{num(m.guests) ?? "-"} ท่าน</span><span className="price">{thb(num(m.price))}/คืน</span></div></div>))}</div></Section>,
     services: () => <Section id="services" title="บริการ"><div className="grid">{arr<Any>(c.services.items).map((m, i) => (
       <div className="card item" key={i}><b>{str(m.name)}</b>{!!m.desc && <p className="meta">{str(m.desc)}</p>}<div className="row"><span className="meta">{str(m.duration)}</span><span className="price">{thb(num(m.price))}</span></div></div>))}</div></Section>,

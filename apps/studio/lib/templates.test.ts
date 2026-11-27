@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkTemplate, checksPass, visibleBlocks, sampleConfig, specTheme, PALETTES, VARIANTS, type TemplateSpec } from "../../../packages/blocks/src/templates.ts";
+import { checkTemplate, checksPass, visibleBlocks, sampleConfig, specTheme, PALETTES, PALETTE_PAIR, VARIANTS, type TemplateSpec } from "../../../packages/blocks/src/templates.ts";
 import { contrast } from "../../../packages/blocks/src/themes.ts";
 
 const base: TemplateSpec = {
@@ -44,4 +44,28 @@ test("ลูกค้าปิดบล็อกได้ ยกเว้นบ�
   assert.ok(v.includes("menu") && v.includes("hero"));
   const empty = visibleBlocks(base, sampleConfig("restaurant", "empty")).map((b) => b.type);
   assert.ok(!empty.includes("faq") && !empty.includes("reviews"));
+});
+
+test("ทุกชุดสีมีคู่สว่าง/มืด · ตัวหนังสืออ่านได้ทั้งบนพื้นและการ์ด · ตัวบนสีเน้นอ่านได้", () => {
+  for (const p of PALETTES) {
+    const pair = PALETTES.find((x) => x.id === PALETTE_PAIR(p.id));
+    assert.ok(pair, `${p.id} ไม่มีคู่ ${PALETTE_PAIR(p.id)}`);
+    assert.equal(!!pair!.dark, !p.dark, `${p.id} คู่ต้องต่างโหมด`);
+    assert.ok(contrast(p.text, p.surface) >= 4.5, `${p.id} text/surface`);
+    assert.ok(contrast(p.dark ? p.bg : p.text, p.accent) >= 4.5, `${p.id} ตัวบนสีเน้น`);
+  }
+});
+
+test("เทมเพลตชุดสีใหม่ + Google Sans ผ่านการตรวจ", () => {
+  for (const palette of ["apple", "bronze-dark", "emerald"]) assert.ok(checksPass(checkTemplate({ ...base, palette, fonts: "google-sans" })), palette);
+});
+
+test("ที่พัก/แคมป์: ต้องมีบล็อกห้องพัก · เทมเพลต H1 ผ่านการตรวจ · ข้อมูลตัวอย่างครบ 3 ชุด", () => {
+  const h1: TemplateSpec = { key: "H1", version: 1, name: "บ้านพักริมน้ำ", business: "hotel_camp", palette: "bronze", fonts: "google-sans", radius: 12,
+    blocks: ["hero:cover", "rooms:cards", "gallery:strip", "reviews:quote", "faq:accordion", "hours:default", "line:default", "map:default", "promptpay:default"].map((x) => { const [type, variant] = x.split(":"); return { type, variant }; }),
+    required: ["hero", "rooms", "hours", "line", "map"] };
+  assert.ok(checksPass(checkTemplate(h1)), JSON.stringify(checkTemplate(h1).filter((x) => !x.ok)));
+  const noRooms = checkTemplate({ ...h1, blocks: h1.blocks.filter((b) => b.type !== "rooms"), required: h1.required.filter((t) => t !== "rooms") });
+  assert.ok(noRooms.some((x) => !x.ok && /บังคับครบ/.test(x.name)));
+  assert.equal(visibleBlocks(h1, sampleConfig("hotel_camp", "sample")).find((b) => b.type === "rooms")?.variant, "cards");
 });
