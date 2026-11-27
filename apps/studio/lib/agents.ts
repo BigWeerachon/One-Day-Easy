@@ -8,6 +8,7 @@ import { FONTS, sanitizeTheme } from "@ode/blocks/themes";
 import { previewUrl } from "./preview";
 import { notify } from "./notify";
 import { checkSalesReply, sameOriginOnly } from "./agent-guard";
+import { businessOf, AGENT_TEMPLATE } from "./business";
 
 // ทีม Agent ของระบบ (ทุกตัวใช้ Claude · บันทึกทุกครั้งใน agent_runs)
 //   Sales   ตอบคำถามในแชทที่ปุ่มตอบไม่ได้ · ส่งต่อคนเมื่อเกินขอบเขต
@@ -35,13 +36,16 @@ const ASK: Record<string, string> = {
   hours: "ร้านเปิด-ปิดวันและเวลาไหนบ้างคะ",
   map: "ที่อยู่ร้านคือที่ไหนคะ",
   menu: "ขอรายการเมนูพร้อมราคาค่ะ (พิมพ์หรือส่งรูปเมนูได้)",
+  cars: "ขอรายการรถในเต็นท์ค่ะ (ยี่ห้อ รุ่น ปี เลขไมล์ ราคา พร้อมรูปคันละ 1 รูป)",
+  sellcar: "อยากให้ฟอร์มรับซื้อรถบนเว็บเขียนหัวข้อว่าอะไรคะ (เช่น ขายรถให้เรา ประเมินฟรี)",
+  rooms: "ขอรายการห้องพักค่ะ (ชื่อห้อง ราคาต่อคืน พักได้กี่ท่าน พร้อมรูป)",
 };
 const pdpaText = (shop: string) => `${shop} เก็บข้อมูลที่คุณให้ผ่านเว็บไซต์นี้ (เช่น ชื่อ เบอร์โทร ข้อความ) เพื่อติดต่อกลับและให้บริการเท่านั้น ไม่ขายหรือส่งต่อให้บุคคลอื่น คุณขอดู แก้ไข หรือลบข้อมูลได้โดยติดต่อร้านทาง LINE`;
 
 /** Builder: แก้เว็บตามคำสั่ง แล้วบันทึกเฉพาะบล็อกที่ผ่านการตรวจ */
 async function applyFix(jobId: string, clientId: string, siteId: string, instruction: string) {
   const site = (await S.getSite(siteId))!;
-  const tpl = TEMPLATES.find((t) => t.id === site.template)!;
+  const tpl = await S.templateOf(site);
   const own = new Set((await q<{ id: string }>(`select id::text from client_files where client_id = $1 and kind <> 'ref'`, [clientId])).map((f) => `file:${f.id}`));
   const r = await proposePatch({ template: tpl, config: site.config, instruction: `${instruction}\n\nรูปของลูกค้าที่ใช้ได้: ${[...own].join(", ") || "ไม่มี"}`, notes: await S.clientNotes(clientId) });
   const config = { ...site.config };
@@ -72,6 +76,14 @@ const FOOD_TEMPLATES = [
 /** Design: ดูภาพ ref และรูปร้าน แล้วกำหนดเทมเพลต ชุดสี ฟอนต์ โทนภาษา · ค่าที่ไม่ผ่านการตรวจใช้ของเทมเพลตแทน */
 export async function runDesign(jobId: string, clientId: string): Promise<Design> {
   const shop = await shopOf(clientId);
+  // ธุรกิจที่มีเทมเพลตของตัวเอง (เต็นท์รถ ที่พัก): หน้าตาและชุดสีล็อกตามเทมเพลตที่อนุมัติแล้ว · ไม่ต้องให้ Design เลือก
+  const biz = businessOf(typeof shop.type === "string" ? shop.type : null);
+  if (biz === "car_dealer" || biz === "hotel_camp") {
+    const brief = { template: AGENT_TEMPLATE[biz], theme: {}, tone: "", heroPhoto: null, rationale: `ใช้เทมเพลต ${AGENT_TEMPLATE[biz]} ของธุรกิจ${biz === "car_dealer" ? "เต็นท์รถ" : "ที่พัก"} (ชุดสีและฟอนต์ล็อกตามเทมเพลต)`, usedRef: false, dropped: [] as string[] };
+    await q(`update jobs set design_brief = $2 where id = $1`, [jobId, JSON.stringify(brief)]);
+    await logRun("design", "designed", { jobId, clientId, detail: { summary: brief.rationale, ...brief } });
+    return brief;
+  }
   const files = (await q<{ id: string; kind: DraftImage["kind"]; mime: string; bytes: Buffer }>(`select id::text, kind, mime, bytes from client_files where client_id = $1 order by (kind = 'ref') desc, (kind = 'logo') desc, id limit 6`, [clientId]))
     .map((f) => ({ ...f, mime: f.mime as SlipImageMime }));
   const { data: b, usage } = await designBrief({ templates: FOOD_TEMPLATES, fonts: FONTS, shop, notes: await S.clientNotes(clientId), images: files });
@@ -133,8 +145,7 @@ export async function runPipeline(jobId: string, opts: { instruction?: string; f
       siteId = d.siteId;
       await logRun("builder", "drafted", { jobId, clientId, detail: { summary: d.summary, applied: d.applied, skipped: d.skipped } });
     }
-    const tplId = (await S.getSite(siteId))!.template;
-    const tpl = TEMPLATES.find((t) => t.id === tplId)!;
+    const tpl = await S.templateOf((await S.getSite(siteId))!);
     await ensureLegal(siteId, tpl, (await shopOf(clientId)).name);
     if (opts.instruction) await applyFix(jobId, clientId, siteId, opts.instruction);
 

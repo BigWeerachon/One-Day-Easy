@@ -12,7 +12,7 @@ import { liveUrl } from "./preview";
 export type ClientStatus = "lead" | "active" | "care";
 export interface Client { id: string; name: string; kind: string; status: ClientStatus; pkg: string; channel: "LINE" | "Email" | "Web" | "FB"; contact: string; color: string; lastContactMin: number; taxId: string | null }
 export interface Job { id: string; clientId: string; siteId: string | null; title: string; stage: Stage; pausedFrom: Stage | null; template: string | null; checksPassed: number; checklistDone: boolean; pdpa: boolean; approved: boolean; editRounds: number; slaHours: number | null; assignee: string }
-export interface Site { id: string; clientId: string; domain: string; template: string; status: "draft" | "live" | "down"; version: number; config: Record<string, unknown> }
+export interface Site { id: string; clientId: string; domain: string; template: string; status: "draft" | "live" | "down"; version: number; config: Record<string, unknown>; templateVersionId?: string | null }
 export interface SiteVersion { siteId: string; version: number; at: string; by: string; note: string }
 export interface Doc { no: string; type: DocType; clientId: string; clientName: string; jobId: string | null; total: number; paid: number; status: "draft" | "issued" | "paid" | "voided" | "expired"; issuedAt: string; revision: number }
 export interface Slip { id: string; docNo: string; amount: number; status: "pending" | "verified" | "rejected"; at: string }
@@ -42,7 +42,7 @@ const JOB_COLS = `id, client_id "clientId", site_id "siteId", title, stage, paus
 export const listJobs = (clientId?: string) => q<Job>(`select ${JOB_COLS} from jobs where ($1::uuid is null or client_id = $1) order by sla_due_at nulls last`, [clientId ?? null]);
 export const getJob = (id: string) => isUuid(id) ? one<Job>(`select ${JOB_COLS} from jobs where id = $1`, [id]) : Promise.resolve(undefined);
 
-const SITE_COLS = `id, client_id "clientId", domain, template, status, version, config`;
+const SITE_COLS = `id, client_id "clientId", domain, template, status, version, config, template_version_id::text "templateVersionId"`;
 export const listSites = (clientId?: string) => q<Site>(`select ${SITE_COLS} from sites where ($1::uuid is null or client_id = $1) order by domain`, [clientId ?? null]);
 export const getSite = (id: string) => isUuid(id) ? one<Site>(`select ${SITE_COLS} from sites where id = $1`, [id]) : Promise.resolve(undefined);
 export const siteVersions = (siteId: string) => q<SiteVersion>(`select site_id "siteId", version, created_at::text at, coalesce(actor,'-') by, coalesce(note,'') note from site_versions where site_id = $1 order by version desc limit 20`, [siteId]);
@@ -330,6 +330,9 @@ export async function createSiteForJob(jobId: string, template: string) {
     if (j.site_id) return j.site_id;
     const slug = j.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "site";
     const [s] = await rows<{ id: string }>(c, `insert into sites (client_id, domain, template) values ($1, $2 || '-' || substr(md5(random()::text), 1, 6) || '.' || $4, $3) returning id`, [j.client_id, slug, template, process.env.PLATFORM_DOMAIN || "onedayeasy.app"]);
+    // เทมเพลตที่ล็อกเวอร์ชัน (เช่น D1, H1): ผูกกับเวอร์ชันล่าสุดที่อนุมัติแล้ว
+    if (/^[A-Z]\d+$/.test(template) && !/^T\d+$/.test(template))
+      await c.query(`update sites set template_version_id = (select id from template_versions where key = $2 and status = 'approved' order by version desc limit 1) where id = $1`, [s.id, template]);
     await c.query(`update jobs set site_id = $2, template = $3, checks_passed = 0 where id = $1`, [jobId, s.id, template]);
     await emit(c, "template.selected", { jobId, actor: "human", source: "human", after: template });
     return s.id;
@@ -506,3 +509,15 @@ export async function notifySlipResult(slipId: string, outcome: "approved" | "re
 
 export const clientFiles = (clientId: string) => q<{ id: string; mime: string; at: string; kind: string }>(`select id::text, mime, created_at::text at, kind from client_files where client_id = $1 order by id desc limit 30`, [clientId]);
 export const clientFile = (id: string) => one<{ mime: string; bytes: Buffer; clientId: string }>(`select mime, bytes, client_id "clientId" from client_files where id = $1`, [id]);
+
+/** เทมเพลตของเว็บในรูปแบบที่ Agent ใช้ (ชื่อบล็อก + บล็อกบังคับ) · เวอร์ชันล็อก → อ่านจาก template_versions · รุ่นเดิม → จากโค้ด */
+export async function templateOf(site: Site): Promise<import("./blocks").Template> {
+  const { TEMPLATES } = await import("./blocks");
+  if (site.templateVersionId) {
+    const t = await one<{ key: string; name: string; spec: { blocks: { type: string }[]; required: string[] } }>(`select key, name, spec from template_versions where id = $1`, [site.templateVersionId]);
+    if (t) return { id: t.key, name: t.name, blocks: t.spec.blocks.map((b) => b.type), required: t.spec.required };
+  }
+  const legacy = TEMPLATES.find((x) => x.id === site.template);
+  if (!legacy) throw new Error(`ไม่พบเทมเพลต ${site.template}`);
+  return legacy;
+}

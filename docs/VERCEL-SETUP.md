@@ -103,6 +103,7 @@ Vercel Hobby รัน cron ได้วันละครั้ง ระบบ
 
 ## 7. ทดสอบหลัง deploy
 
+- [ ] **Studio → ตั้งค่า → ตรวจความพร้อมระบบ → ตรวจตอนนี้** · ทุกแถวต้องไม่มี "ต้องแก้" (ตรวจค่าตั้ง, migration, เทมเพลต, บัญชี Owner, LINE token + webhook URL, Engine, Vercel wildcard, Anthropic key)
 - [ ] เปิด `https://onedayeasy.com` → เห็นหน้าขาย ปุ่ม LINE ชี้ OA ถูก
 - [ ] ล็อกอิน Studio
 - [ ] ทัก OA "สนใจทำเว็บ" → ข้อความเข้ากล่องข้อความ

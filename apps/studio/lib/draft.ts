@@ -1,4 +1,5 @@
 import "server-only";
+import { businessOf, AGENT_TEMPLATE } from "./business";
 import { q, one } from "./db";
 import * as S from "./store";
 import { TEMPLATES, validateBlock, runChecks } from "./blocks";
@@ -12,8 +13,10 @@ const MAX_IMAGES = 8; // จำกัดจำนวนรูปที่ส่�
 
 /** เทมเพลตเริ่มต้นตามประเภทร้าน · คาเฟ่ = T1 · ร้านอาหารและอื่นๆ = T3 */
 export function pickTemplate(kind: string | null, suggested: string | null | undefined) {
+  const b = businessOf(kind);
+  if (b === "car_dealer" || b === "hotel_camp") return AGENT_TEMPLATE[b]; // ธุรกิจใหม่ใช้เทมเพลตของธุรกิจเสมอ
   if (suggested && TEMPLATES.some((t) => t.id === suggested)) return suggested;
-  return /คาเฟ่|กาแฟ|cafe|coffee|เบเกอรี|ขนม/i.test(kind ?? "") ? "T1" : "T3";
+  return AGENT_TEMPLATE[b];
 }
 
 export interface Design { template: string; theme: ThemeOverride; tone: string; heroPhoto: string | null }
@@ -29,7 +32,7 @@ export async function draftForJob(jobId: string, opts: { by?: string; force?: bo
       `select name, kind, phone, opening_hours hours, address, intake from clients where id = $1`, [j.client_id]))!;
     const siteId = j.site_id ?? await S.createSiteForJob(jobId, opts.design?.template ?? pickTemplate(c.kind, c.intake?.suggested_template));
     const site = (await S.getSite(siteId))!;
-    const tpl = TEMPLATES.find((t) => t.id === site.template)!;
+    const tpl = await S.templateOf(site);
     const files = await q<{ id: string; kind: DraftImage["kind"]; mime: string; bytes: Buffer }>(
       `select id::text, kind, mime, bytes from client_files where client_id = $1 order by (kind = 'ref') desc, (kind = 'logo') desc, id limit $2`, [j.client_id, MAX_IMAGES]);
     const shop = await shopOf(j.client_id, siteId);
