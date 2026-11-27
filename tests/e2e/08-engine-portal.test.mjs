@@ -18,6 +18,7 @@ test("โดเมนบริษัท → หน้าขายบริกา
   assert.equal(r.status, 200);
   assert.match(r.body, /ดูตัวอย่างก่อน ถูกใจค่อยจ่าย/);
   assert.match(r.body, /990/);
+  assert.match(r.body, /งานตามโจทย์ ราคาตามขอบเขตงาน/);
   assert.match(r.body, /line\.me\/R\/ti\/p\/%40onedayeasy/);
 });
 
