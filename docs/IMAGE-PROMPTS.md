@@ -136,4 +136,93 @@ Minimal flat vector logo mark for a small Thai business, single color, simple ge
 - อัปโหลดเข้า Design System ที่เมนู Assets (แยกกลุ่ม R / C / D / T / Common)
 - ตรวจทุกภาพว่าไม่มีตัวหนังสือหรือทะเบียนรถที่อ่านได้
 - ภาพ hero ให้ลองครอปทั้ง 16:9 และ 4:5 ว่าวัตถุหลักยังอยู่ในเฟรม
-- รวมทั้งหมด **70 ภาพ** + โลโก้ 4 แบบ
+- รวมทั้งหมด **119 ภาพ** + โลโก้ 4 แบบ (หัวข้อ 1–9)
+
+## 7. เพิ่มเติม: รถในลาน (ให้ครบ 12 คัน)
+
+ต่อจาก `d-car-01`–`d-car-05` · สไตล์เดียวกัน: front three-quarter view, clean dealership lot background, no badges, no readable plates
+
+| File | Ratio | Prompt |
+|---|---|---|
+| `d-car-07.jpg` | 4:3 | White compact eco car (city hatchback), front three-quarter view, clean lot background, no badges, no readable plates |
+| `d-car-08.jpg` | 4:3 | Dark blue mid-size sedan, front three-quarter view, clean lot background, no badges, no readable plates |
+| `d-car-09.jpg` | 4:3 | Pearl white 7-seat MPV, side profile, clean lot background, no badges, no readable plates |
+| `d-car-10.jpg` | 4:3 | Silver passenger van with sliding door, front three-quarter view, clean lot background, no badges, no readable plates |
+| `d-car-11.jpg` | 4:3 | Orange single-cab pickup with a flat cargo bed, side profile, clean lot background, no badges, no readable plates |
+| `d-car-12.jpg` | 4:3 | Grey compact crossover SUV, front three-quarter view, clean lot background, no badges, no readable plates |
+| `d-car-13.jpg` | 4:3 | Black executive sedan, rear three-quarter view, clean lot background, no badges, no readable plates |
+
+## 8. เพิ่มเติม: ตัวอย่างรูปที่ลูกค้าอัปโหลดในฟอร์มขายรถ (รถคันเดียว 8 มุม)
+
+ใช้รถคันเดียวกันทุกภาพ ใส่ประโยคนี้ต่อท้ายทุก prompt: `same silver 2018 compact sedan in every photo, parked in a Thai home driveway, casual smartphone photo look, daylight, no readable plates`
+
+| File | Ratio | Prompt |
+|---|---|---|
+| `d-sell-front.jpg` | 4:3 | Front view of the car, straight on |
+| `d-sell-rear.jpg` | 4:3 | Rear view of the car, straight on |
+| `d-sell-left.jpg` | 4:3 | Left side profile of the car |
+| `d-sell-right.jpg` | 4:3 | Right side profile of the car |
+| `d-sell-interior.jpg` | 4:3 | Front seats and dashboard seen from the open driver door |
+| `d-sell-odometer.jpg` | 4:3 | Close-up of the instrument cluster, digits blurred and unreadable |
+| `d-sell-engine.jpg` | 4:3 | Open hood showing a clean engine bay |
+| `d-sell-damage.jpg` | 4:3 | Close-up of a small scratch on the rear bumper |
+
+## 9. เพิ่มเติม: ชุดภาพแยกตามสไตล์ (เทมเพลตที่ 2 ของแต่ละธุรกิจ)
+
+ชุดแรก (หัวข้อ 1–2) เป็นสไตล์ร้านข้างทาง/คาเฟ่สว่าง · ชุดนี้ใช้กับเทมเพลตสไตล์หรู/มืด ให้แต่ละเทมเพลตไม่ใช้รูปซ้ำกัน
+
+### R2 · ร้านอาหารไทยหรู (fine dining)
+เพิ่มท้าย Style base: `moody low-key lighting, dark wood and brass, elegant plating, deep shadows`
+
+| File | Ratio | Prompt |
+|---|---|---|
+| `r2-hero-cover.jpg` | 16:9 (และ 4:5) | Elegant Thai fine-dining room at night, dark wood tables, brass lamps, candle light, empty chairs, left side dark for text |
+| `r2-hero-split.jpg` | 4:3 | Chef placing a herb garnish on a refined Thai dish with tweezers |
+| `r2-menu-01.jpg` | 4:3 | Massaman lamb shank on a dark ceramic plate, refined plating, dark background |
+| `r2-menu-02.jpg` | 4:3 | Grilled river prawn with tamarind sauce, refined plating, dark background |
+| `r2-menu-03.jpg` | 4:3 | Miang kham appetizer arranged on betel leaves, refined plating, dark background |
+| `r2-menu-04.jpg` | 4:3 | Crab meat yellow curry in a small copper pot, dark background |
+| `r2-menu-05.jpg` | 4:3 | Thai tasting menu dessert trio on a slate plate, dark background |
+| `r2-menu-06.jpg` | 4:3 | Signature Thai cocktail with lemongrass and lime leaf, dark bar background |
+| `r2-gallery-01.jpg` | 1:1 | Wine glass and candle on a dark table, soft bokeh |
+| `r2-gallery-02.jpg` | 1:1 | Private dining room with a set long table |
+| `r2-gallery-03.jpg` | 1:1 | Close-up of a sauce being poured onto a plate |
+| `r2-gallery-04.jpg` | 1:1 | Bartender stirring a cocktail under warm light |
+
+### C2 · คาเฟ่มินิมอลโทนเข้ม / slow bar
+เพิ่มท้าย Style base: `dark concrete and walnut wood, single spotlight, quiet specialty coffee mood`
+
+| File | Ratio | Prompt |
+|---|---|---|
+| `c2-hero-cover.jpg` | 16:9 (และ 4:5) | Dark minimalist specialty coffee bar, concrete counter, single pendant spotlight, barista doing pour-over, right side dark for text |
+| `c2-hero-split.jpg` | 4:3 | Pour-over coffee dripping into a glass server, steam, dark background |
+| `c2-menu-01.jpg` | 4:3 | Espresso in a small ceramic cup on a walnut tray, dark background |
+| `c2-menu-02.jpg` | 4:3 | Iced black coffee with a large clear ice cube, dark background |
+| `c2-menu-03.jpg` | 4:3 | Cold brew tonic with orange peel in a tall glass, dark background |
+| `c2-menu-04.jpg` | 4:3 | Basque burnt cheesecake slice on a dark plate |
+| `c2-menu-05.jpg` | 4:3 | Canelé pastries on a small black plate |
+| `c2-menu-06.jpg` | 4:3 | Single-origin coffee beans in a small bowl, dark background |
+| `c2-gallery-01.jpg` | 1:1 | Coffee roaster machine with beans cooling, warm light |
+| `c2-gallery-02.jpg` | 1:1 | Hand holding a cup by a dark window, rain outside |
+| `c2-gallery-03.jpg` | 1:1 | Minimal seating area with a single bench and a plant |
+| `c2-gallery-04.jpg` | 1:1 | Close-up of latte art in a dark cup |
+
+### D2 · เต็นท์รถพรีเมียม (ในโชว์รูม)
+เพิ่มท้าย Style base: `indoor premium showroom, polished concrete floor, soft studio lighting, reflections`
+
+| File | Ratio | Prompt |
+|---|---|---|
+| `d2-hero-cover.jpg` | 16:9 (และ 4:5) | Premium indoor used-car showroom with three polished luxury sedans under soft spotlights, lower third dark for text |
+| `d2-hero-split.jpg` | 4:3 | Customer and advisor sitting at a showroom desk reviewing paperwork, car behind them |
+| `d2-car-01.jpg` | 4:3 | Black luxury sedan in the showroom, front three-quarter view, no badges, no readable plates |
+| `d2-car-02.jpg` | 4:3 | White luxury SUV in the showroom, front three-quarter view, no badges, no readable plates |
+| `d2-car-03.jpg` | 4:3 | Grey sports coupe in the showroom, side profile, no badges, no readable plates |
+| `d2-car-04.jpg` | 4:3 | Dark green premium pickup in the showroom, front three-quarter view, no badges, no readable plates |
+| `d2-gallery-01.jpg` | 1:1 | Leather seat stitching close-up |
+| `d2-gallery-02.jpg` | 1:1 | Car key resting on a dark desk |
+| `d2-gallery-03.jpg` | 1:1 | Showroom detailing bay with a car being polished |
+| `d2-gallery-04.jpg` | 1:1 | Headlight close-up with soft reflections |
+
+---
+
+**รวมทั้งหมดหลังเพิ่ม: 70 + 7 + 8 + 34 = 119 ภาพ** + โลโก้ 4 แบบ
