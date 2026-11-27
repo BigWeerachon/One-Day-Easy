@@ -34,6 +34,7 @@
 .ode-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .ode-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;display:grid;gap:6px;align-content:start;position:relative}
 .ode-card b{font-size:18px}
+.plans.two{grid-template-columns:repeat(auto-fit,minmax(260px,360px));justify-content:center}
 .plan.hot{border:2px solid var(--p)}
 .ode-price{font-size:36px;font-weight:700;font-variant-numeric:tabular-nums}
 .ode-muted{color:var(--muted)}
