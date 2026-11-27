@@ -53,7 +53,8 @@ test("มีใบค้างแต่รูปไม่ใช่สลิป �
   await waitFor(async () => (await linePushes(U)).some((m) => /รูปชุดนี้คืออะไร/.test(m.text) && m.quickReply.items.some((i) => i.action.data === "od:img:slip")), { message: "ไม่มีปุ่มสลิปโอนเงิน" });
   await linePostback(U, "od:img:slip");
   await waitFor(async () => (await val(`select count(*)::int from slips where client_id = $1 and status = 'pending' and line_message_id is null and source = 'line'`, [client])) === 1, { message: "ไม่ได้สร้างสลิปรอตรวจ" });
-  assert.equal(await val(`select count(*)::int from client_files where line_message_id = 'img-d'`), 0);
+  // ระบบสร้างสลิปก่อนแล้วจึงลบรูปออกจากคลังรูปลูกค้า (คนละคำสั่ง) · รอจนลบเสร็จ ไม่อ่านค่ากลางทาง
+  await waitFor(async () => (await val(`select count(*)::int from client_files where line_message_id = 'img-d'`)) === 0, { message: "รูปยังค้างในคลังรูปลูกค้า" });
   await sql(`update slips set status = 'rejected' where status = 'pending' and line_message_id is null and source = 'line'`);
 });
 
