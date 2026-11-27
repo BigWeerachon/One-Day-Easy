@@ -616,6 +616,18 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://<studio>/api/cron/booking
 
 ลูกค้าแก้เว็บแล้ว เว็บจริงจะเปลี่ยนภายในราว 1 นาที ส่วนหน้าตัวอย่าง (preview) และ API ไม่ผ่านแคช
 
+### 14.2 เต็นท์รถมือสอง: ฟอร์ม "ขายรถให้เรา"
+
+- เทมเพลต **D1 เต็นท์รถมั่นใจ** (ธุรกิจ `car_dealer`) มีบล็อกบังคับ `cars` (รถในเต็นท์ ติ๊ก "ขายแล้ว" ได้) และ `sellcar` (ปุ่มไป `/sell`)
+- ผู้ขายกรอก: ชื่อ เบอร์ จังหวัด ยี่ห้อ รุ่น ปี ไมล์ เกียร์ (+สี ราคาที่ต้องการ หมายเหตุ) และ**รูป 4–10 รูป** พร้อมยินยอม PDPA
+  · รูปถูกย่อในเครื่องผู้ใช้ (ด้านยาว 1280px) เพราะ Vercel รับคำขอได้ไม่เกิน 4.5 MB
+- ทางเดินข้อมูล: Engine `/api/lead` (อ่าน DB อย่างเดียว) → ลงลายเซ็น HMAC ด้วย `PREVIEW_SECRET` + เวลา → Studio `/api/leads`
+  ตรวจลายเซ็น (อายุ 5 นาที), เว็บต้องออนไลน์และมีบล็อก sellcar, ตรวจข้อมูลด้วย `parseSellCar` ชุดเดียวกับหน้าเว็บ, ตรวจชนิดไฟล์จากเนื้อไฟล์จริง
+- กันสแปม: ไม่เกิน 5 ครั้ง/IP/ชั่วโมง และ 3 ครั้ง/เบอร์/เว็บ/วัน (เก็บ IP เป็น hash)
+- บันทึกใน `site_leads` + `lead_files` แล้ว**แจ้งร้านทาง LINE ทันที** · ร้านพิมพ์ "ดูข้อเสนอ" ใน LINE เพื่อรับลิงก์ Portal `/p/<token>/leads`
+  ดูรูป โทรกลับ และเปลี่ยนสถานะ (ใหม่ → ติดต่อแล้ว → นัดตรวจรถ → รับซื้อแล้ว / ไม่รับซื้อ)
+- Engine ต้องมี env `STUDIO_URL` และ `PREVIEW_SECRET` ตัวเดียวกับ Studio
+
 ## 15. Deploy ขึ้น Vercel + Supabase
 
 1. **Supabase:** ใช้ connection string แบบ URI รัน migration ครั้งแรก (และทุกครั้งที่มี migration ใหม่):
@@ -843,7 +855,7 @@ test("owner เห็นคิววันนี้", async () => {
 | `SHOP_RECEIVER_NAMES` / `SHOP_RECEIVER_ACCOUNTS` | Studio | ชื่อ/บัญชีร้าน (คั่นด้วย ,) สำหรับกฎสลิป |
 | `SLIP_AUTO_APPROVE` | Studio | `off` (ค่าเริ่มต้น · คนยืนยันทุกใบ) / `on` |
 | `SLIP_MAX_AGE_DAYS` | Studio | ค่าเริ่มต้น 3 |
-| `STUDIO_URL` / `PORTAL_BASE_URL` | Studio | URL สาธารณะของ Studio (ใช้สร้างลิงก์ Portal) |
+| `STUDIO_URL` / `PORTAL_BASE_URL` | Studio, Engine | URL สาธารณะของ Studio (ลิงก์ Portal · Engine ใช้ส่งฟอร์มขายรถต่อให้ Studio) |
 | `PROMPTPAY_ID` | Studio | เบอร์หรือเลข 13 หลัก |
 | `ENGINE_URL` | Studio | URL ของ Engine (ลิงก์ตัวอย่างเว็บ) |
 | `PREVIEW_SECRET` | Studio, Engine | สุ่มยาวๆ ต้องตรงกันทั้งสองฝั่ง |

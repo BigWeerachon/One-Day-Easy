@@ -153,3 +153,15 @@ export async function editLogoAction(f: FormData) {
     await SE.saveLogo(ctx, { version, image, remove: s(f, "nologo") === "1" });
   }, "logo");
 }
+
+/** เต็นท์รถ: อัปเดตสถานะ/บันทึกของข้อเสนอขายรถ */
+export async function leadStatusAction(f: FormData) {
+  const token = s(f, "t");
+  const r = await P.resolvePortal(token);
+  if (r.status !== "ok") redirect(`/p/${encodeURIComponent(token)}`);
+  const { updateLead } = await import("./leads");
+  let q = "ok=1";
+  try { await updateLead(r.ctx.clientId, s(f, "id"), s(f, "status"), s(f, "note")); } catch (e) { q = `err=${encodeURIComponent((e as Error).message)}`; }
+  revalidatePath(`/p/${token}/leads`);
+  redirect(`/p/${token}/leads?${q}#l${s(f, "id")}`);
+}

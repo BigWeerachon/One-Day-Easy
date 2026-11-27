@@ -118,7 +118,9 @@ export default async function EditSite({ params, searchParams }: { params: Promi
       const spec = EDIT_FIELDS[b], cur = (c[b] ?? {}) as Any;
       const list = spec.list ? ((cur[spec.list.key] as Any[] | undefined) ?? []) : [];
       const rows = spec.list ? [...list, ...Array.from({ length: Math.min(2, spec.list.max - list.length) }, () => ({}) as Any)] : [];
-      const input = (fd: Field, name: string, v: unknown, aria: string) => fd.kind === "image"
+      const input = (fd: Field, name: string, v: unknown, aria: string) => fd.kind === "check"
+        ? <label className="pt-sm" style={{ display: "flex", gap: 8, marginTop: 6 }}><input type="checkbox" name={name} value="1" defaultChecked={v === true} aria-label={aria} /> {fd.label}</label>
+        : fd.kind === "image"
         ? <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}><input type="hidden" name={name} value={str(v)} />
             {thumb(v) && <img src={thumb(v)!} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, flex: "none" }} />}
             <div style={{ flex: 1 }}><ImageInput name={name.replace(fd.key, `${fd.key}_new`)} label={thumb(v) ? `เปลี่ยน${fd.label}` : `ใส่${fd.label}`} max={1600} limit={1} /></div></div>

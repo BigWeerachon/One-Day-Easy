@@ -8,7 +8,7 @@
 import { BLOCKS, validateBlock } from "./blocks.ts";
 import { contrast, FONTS, type Theme } from "./themes.ts";
 
-export const BUSINESSES = { restaurant: "ร้านอาหาร", cafe: "คาเฟ่" } as const;
+export const BUSINESSES = { restaurant: "ร้านอาหาร", cafe: "คาเฟ่", car_dealer: "เต็นท์รถมือสอง" } as const;
 export type Business = keyof typeof BUSINESSES;
 
 /** หน้าตาที่บล็อกแต่ละตัวเลือกได้ · ตัวแรกคือค่าเริ่มต้น · เพิ่มหน้าตาใหม่ = เขียนโค้ดใน Engine + เทส */
@@ -16,6 +16,8 @@ export const VARIANTS: Record<string, readonly string[]> = {
   hero: ["split", "cover"],
   menu: ["cards", "list"],
   sets: ["cards"],
+  cars: ["cards", "list"],
+  sellcar: ["default"],
   gallery: ["grid", "strip"],
   reviews: ["cards", "quote"],
   faq: ["accordion"],
@@ -26,13 +28,15 @@ export const VARIANT_LABEL: Record<string, string> = {
   quote: "คำพูดเด่น", accordion: "พับเปิด", default: "มาตรฐาน",
 };
 export const BLOCK_LABEL: Record<string, string> = {
-  hero: "หน้าแรก", menu: "เมนู", sets: "ชุดคุ้มค่า", gallery: "แกลเลอรี", reviews: "รีวิว", faq: "คำถามที่พบบ่อย",
+  hero: "หน้าแรก", menu: "เมนู", sets: "ชุดคุ้มค่า", cars: "รถในเต็นท์", sellcar: "ฟอร์มขายรถให้เรา", gallery: "แกลเลอรี", reviews: "รีวิว", faq: "คำถามที่พบบ่อย",
   hours: "เวลาเปิด", line: "LINE", map: "แผนที่", promptpay: "พร้อมเพย์", legal: "PDPA / ข้อกฎหมาย",
 };
 /** บล็อกที่ทุกเทมเพลตต้องมีและลูกค้าปิดไม่ได้: สิ่งที่ลูกค้าของร้านต้องเห็นเสมอ */
 export const CORE_REQUIRED = ["hero", "line", "hours", "map"] as const;
 /** บล็อกที่เทมเพลตของแต่ละธุรกิจต้องมี */
-export const BUSINESS_REQUIRED: Record<Business, string[]> = { restaurant: ["menu"], cafe: ["menu"] };
+export const BUSINESS_REQUIRED: Record<Business, string[]> = { restaurant: ["menu"], cafe: ["menu"], car_dealer: ["cars", "sellcar"] };
+/** ตัวอักษรนำหน้ารหัสเทมเพลตของแต่ละธุรกิจ */
+export const BUSINESS_PREFIX: Record<Business, string> = { restaurant: "R", cafe: "C", car_dealer: "D" };
 
 /** ชุดสีที่ผ่านการตรวจคอนทราสต์แล้ว · ทีมเลือกจากนี้เท่านั้น */
 export interface Palette { id: string; name: string; primary: string; accent: string; bg: string; surface: string; text: string; dark?: boolean }
@@ -80,8 +84,10 @@ export type SampleKind = "sample" | "long" | "empty";
 const L = (n: number, unit = "ก") => unit.repeat(n);
 export function sampleConfig(business: Business, kind: SampleKind): Record<string, unknown> {
   const cafe = business === "cafe";
+  const car = (i: number) => ({ brand: "Toyota", model: ["Yaris Ativ", "Corolla Cross", "Hilux Revo", "Fortuner"][i % 4], year: 2019 + (i % 5), mileage: 35000 + i * 12000, price: 459000 + i * 85000, gear: "ออโต้" });
   if (kind === "empty") return {
     hero: { title: cafe ? "คาเฟ่" : "ร้าน" },
+    cars: { items: [{ brand: "Honda", model: "City", year: 2018, mileage: 0, price: 0 }] }, sellcar: {},
     menu: { items: [{ name: "เมนู", price: 0 }] },
     hours: { days: "ทุกวัน", open: "08:00", close: "17:00" }, line: { id: "@shop" }, map: { lat: 13.75, lng: 100.5, address: "-" },
   };
@@ -89,6 +95,8 @@ export function sampleConfig(business: Business, kind: SampleKind): Record<strin
     hero: { title: L(48), subtitle: L(120), cta: L(16) },
     menu: { items: Array.from({ length: 60 }, (_, i) => ({ name: L(32), price: 999999 + i, spicy: 3, tag: L(12) })) },
     sets: { items: Array.from({ length: 6 }, () => ({ name: L(48), for: 10, price: 999999, was: 1999999 })) },
+    cars: { items: Array.from({ length: 60 }, (_, i) => ({ brand: L(24), model: L(32), year: 2100, mileage: 2_000_000, price: 99_999_999 - i, gear: L(10), fuel: L(10), color: L(10), sold: i % 3 === 0 })) },
+    sellcar: { title: L(48), note: L(200) },
     gallery: { images: Array.from({ length: 12 }, () => ({ src: "", alt: L(120) })) },
     reviews: { rating: 5, count: 99999, source: L(30), items: Array.from({ length: 6 }, () => ({ name: L(30), text: L(240) })) },
     faq: { items: Array.from({ length: 10 }, () => ({ q: L(80), a: L(240) })) },
@@ -99,6 +107,8 @@ export function sampleConfig(business: Business, kind: SampleKind): Record<strin
     hero: { title: cafe ? "บ้านกาแฟริมคลอง" : "ครัวคุณยาย", subtitle: cafe ? "กาแฟคั่วเอง ขนมอบสดทุกเช้า" : "อาหารไทยรสมือแม่ ปรุงสดทุกจาน", cta: "สั่งผ่าน LINE" },
     menu: { items: (cafe ? [["ลาเต้เย็น", 65], ["อเมริกาโน่", 55], ["ครัวซองต์เนยสด", 75], ["มัทฉะลาเต้", 75]] : [["ผัดกะเพราหมูกรอบ", 70], ["ต้มยำกุ้งน้ำข้น", 150], ["แกงเขียวหวานไก่", 80], ["ข้าวผัดปู", 90]]).map(([name, price]) => ({ name, price })) },
     sets: { items: [{ name: "ชุดอิ่มสองคน", for: 2, price: 299, was: 360 }] },
+    cars: { items: Array.from({ length: 6 }, (_, i) => ({ ...car(i), ...(i === 5 ? { sold: true } : {}) })) },
+    sellcar: { title: "อยากขายรถ? ให้เราประเมินราคาฟรี", note: "ส่งรูปและข้อมูลรถ ทีมงานติดต่อกลับภายใน 24 ชั่วโมง" },
     gallery: { images: Array.from({ length: 4 }, (_, i) => ({ src: "", alt: `บรรยากาศร้าน ${i + 1}` })) },
     reviews: { rating: 4.8, count: 128, source: "Google", items: [{ name: "คุณมิน", text: "อร่อย บรรยากาศดี จะมาอีก" }] },
     faq: { items: [{ q: "มีที่จอดรถไหม", a: "มีที่จอดหน้าร้าน 5 คัน" }] },
@@ -138,7 +148,7 @@ export const checksPass = (c: Check[]) => c.every((x) => x.ok);
 
 // ---------------------------------------------------------------- ช่องที่ลูกค้าแก้เองได้ (ชั้นที่ 3)
 // แต่ละบล็อกประกาศช่องที่แก้ได้ · หน้า Portal สร้างฟอร์มจากนี้ · บันทึกแล้วตรวจด้วย validateBlock ทุกครั้ง
-export type FieldKind = "text" | "longtext" | "number" | "time" | "image";
+export type FieldKind = "text" | "longtext" | "number" | "time" | "image" | "check";
 export interface Field { key: string; label: string; kind: FieldKind; max?: number; min?: number; maxNum?: number; required?: boolean }
 export interface EditSpec { list?: { key: string; max: number; label: string }; fields: Field[]; top?: Field[] }
 export const EDIT_FIELDS: Record<string, EditSpec> = {
@@ -146,6 +156,12 @@ export const EDIT_FIELDS: Record<string, EditSpec> = {
   reviews: { top: [{ key: "rating", label: "คะแนนเฉลี่ย (1–5)", kind: "number", min: 1, maxNum: 5, required: true }, { key: "count", label: "จำนวนรีวิว", kind: "number", min: 0, maxNum: 1_000_000, required: true }, { key: "source", label: "จากที่ไหน เช่น Google", kind: "text", max: 30 }],
     list: { key: "items", max: 6, label: "รีวิว" }, fields: [{ key: "name", label: "ชื่อผู้รีวิว", kind: "text", max: 30, required: true }, { key: "text", label: "ข้อความ", kind: "longtext", max: 240, required: true }] },
   gallery: { list: { key: "images", max: 12, label: "รูป" }, fields: [{ key: "src", label: "รูป", kind: "image", required: true }, { key: "alt", label: "คำอธิบายรูป", kind: "text", max: 120, required: true }] },
+  cars: { list: { key: "items", max: 60, label: "รถ" }, fields: [
+    { key: "brand", label: "ยี่ห้อ", kind: "text", max: 24, required: true }, { key: "model", label: "รุ่น", kind: "text", max: 32, required: true },
+    { key: "year", label: "ปี (ค.ศ.)", kind: "number", min: 1950, maxNum: 2100, required: true }, { key: "mileage", label: "เลขไมล์ (กม.)", kind: "number", min: 0, maxNum: 2_000_000, required: true },
+    { key: "price", label: "ราคา (บาท)", kind: "number", min: 0, maxNum: 100_000_000, required: true }, { key: "gear", label: "เกียร์", kind: "text", max: 10 },
+    { key: "img", label: "รูปหลัก", kind: "image" }, { key: "sold", label: "ขายแล้ว", kind: "check" }] },
+  sellcar: { fields: [{ key: "title", label: "หัวข้อ", kind: "text", max: 48 }, { key: "note", label: "คำอธิบายสั้นๆ", kind: "longtext", max: 200 }] },
   line: { fields: [{ key: "id", label: "LINE ID (ขึ้นต้นด้วย @)", kind: "text", max: 40, required: true }] },
   map: { fields: [{ key: "address", label: "ที่อยู่", kind: "text", max: 120, required: true }] },
   promptpay: { fields: [{ key: "id", label: "เบอร์หรือเลขบัตรพร้อมเพย์", kind: "text", max: 13, required: true }] },

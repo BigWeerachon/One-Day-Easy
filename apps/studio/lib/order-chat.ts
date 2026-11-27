@@ -48,10 +48,11 @@ export function qrUrl(docNo: string) {
 const payHint = () => (process.env.PROMPTPAY_ID ? `พร้อมเพย์ ${process.env.PROMPTPAY_ID}` : "ช่องทางที่ทีมงานแจ้ง");
 
 // ---------- ข้อความเข้า ----------
-export type OrderIntent = "menu" | "status" | "selfedit";
+export type OrderIntent = "menu" | "status" | "selfedit" | "leads";
 export function orderIntent(text: string): OrderIntent | null {
   const t = text.toLowerCase();
   if (/^(ขอ)?(ลิงก์)?(แก้|เปลี่ยน|อัปเดต|อัพเดท)\s*(เว็บ|เมนู|ราคา|รูป|เวลาเปิด|ข้อมูลร้าน)/.test(t.trim())) return "selfedit";
+  if (/^(ขอ)?(ลิงก์)?(ดู)?(ข้อเสนอ|คนขายรถ|รถที่(มีคน)?เสนอขาย|รายการขายรถ)/.test(t.trim())) return "leads";
   if (/สถานะ|ถึงไหน|คืบหน้า|เสร็จ(หรือ)?ยัง|เว็บ(ของ)?(ฉัน|ผม|เรา|หนู).*(ยัง|ไหม)/.test(t)) return "status";
   if (/ทำเว็บ|เว็บไซต์|อยากได้เว็บ|รับทำเว็บ|แพ็ก|package|ราคา|เท่าไ(ร|หร่)|สั่งทำ|สนใจ/.test(t)) return "menu";
   return null;
@@ -75,6 +76,7 @@ export async function handleOrderText(clientId: string, userId: string, text: st
   const intent = orderIntent(text);
   if (intent === "status") return await sendStatus(clientId), true;
   if (intent === "selfedit" && await sendEditLink(clientId)) return true;
+  if (intent === "leads" && await sendLeadsLink(clientId)) return true;
   if (intent === "menu" || firstContact) return await sendMenu(clientId, firstContact), true;
   return false;
 }
@@ -119,6 +121,15 @@ async function sendEditLink(clientId: string) {
   }
   const token = await P.createPortalLink(clientId, "line-bot");
   await say(clientId, `ลิงก์แก้เว็บของร้าน (ใช้ได้ ${P.LINK_DAYS} วัน)\n${P.portalUrl(token)}/edit\n\nเปลี่ยนรูปหน้าแรก เมนู ราคา เวลาเปิด และคำถามที่พบบ่อยได้เอง บันทึกแล้วเว็บเปลี่ยนภายใน 1 นาทีค่ะ`);
+  return true;
+}
+
+/** เต็นท์รถ: ลิงก์ดูข้อเสนอขายรถใน Portal (เฉพาะร้านที่เว็บออนไลน์แล้ว) */
+async function sendLeadsLink(clientId: string) {
+  const ctx = await P.ctxForClient(clientId);
+  if (!ctx || !["online", "care"].includes(ctx.job.stage)) return false;
+  const token = await P.createPortalLink(clientId, "line-bot");
+  await say(clientId, `ข้อเสนอขายรถทั้งหมดของร้าน (ลิงก์ใช้ได้ ${P.LINK_DAYS} วัน)\n${P.portalUrl(token)}/leads`);
   return true;
 }
 

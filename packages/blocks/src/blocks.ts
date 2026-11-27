@@ -26,13 +26,15 @@ export const BLOCKS: Record<string, { fields: Record<string, Rule>; summary: str
   promptpay: { fields: { id: pattern(/^(\d{10}|\d{13})$/, "PromptPay ต้อง 10 หรือ 13 หลัก") }, summary: "id 10/13 หลัก · แสดงเฉพาะ QR", usedIn: "ทุกเทมเพลต" },
   map: { fields: { lat: num(-90, 90), lng: num(-180, 180), address: str(120) }, summary: "lat · lng · address ≤ 120", usedIn: "ทุกเทมเพลต" },
   faq: { fields: { items: arr(1, 10, { q: str(80), a: str(240) }) }, summary: "items[≤10]: q ≤ 80 · a ≤ 240", usedIn: "ทุกเทมเพลต" },
+  cars: { fields: { items: arr(1, 60, { brand: str(24), model: str(32), year: num(1950, 2100), mileage: num(0, 2_000_000), price: num(0, 100_000_000) }) }, summary: "items[≤60]: brand ≤ 24 · model ≤ 32 · year · mileage · price · gear · fuel · color · img · imgs[≤10] · sold", usedIn: "D1" },
+  sellcar: { fields: { title: str(48), note: str(200) }, summary: "ฟอร์มขายรถให้ร้าน · title ≤ 48 · note ≤ 200 (ช่องกรอกล็อกโดยระบบ)", usedIn: "D1" },
   legal: { fields: { pdpa: str(2000) }, summary: "PDPA · ทะเบียนพาณิชย์ · ใบอนุญาต", usedIn: "ทุกเทมเพลต" },
 };
 
 function validateFields(obj: unknown, fields: Record<string, Rule>): string | null {
   if (typeof obj !== "object" || obj === null) return "ต้องเป็น object";
   const o = obj as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (!(k in fields) && !["image", "img", "tag", "spicy", "was", "duration", "age", "schedule", "stock", "yearly", "features", "source", "src", "last_order", "items"].includes(k)) return `ฟิลด์ "${k}" ไม่อยู่ใน schema`;
+  for (const k of Object.keys(o)) if (!(k in fields) && !["image", "img", "tag", "spicy", "was", "duration", "age", "schedule", "stock", "yearly", "features", "source", "src", "last_order", "items", "gear", "fuel", "color", "sold", "imgs"].includes(k)) return `ฟิลด์ "${k}" ไม่อยู่ใน schema`;
   for (const [k, rule] of Object.entries(fields)) if (k in o) { const e = rule(o[k]); if (e) return `${k}: ${e}`; }
   return null;
 }

@@ -27,7 +27,7 @@ async function qrSvg(text: string) {
   return QRCode.toString(text, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
 }
 
-export default async function Site({ site, fileQuery = "", orderHref }: { site: SiteRow; fileQuery?: string; orderHref?: string }) {
+export default async function Site({ site, fileQuery = "", orderHref, sellHref }: { site: SiteRow; fileQuery?: string; orderHref?: string; sellHref?: string }) {
   const c = { ...(site.config as Record<string, Any>) };
   // เชื่อม Sabai: เมนูบนเว็บมาจาก POS (ราคาและของหมดตรงกับหน้าร้าน) · ใช้รูปจาก POS ถ้ามี ไม่มีก็ใช้รูปเดิมในเว็บที่ชื่อตรงกัน
   const live = await sabaiMenu(site);
@@ -58,6 +58,14 @@ export default async function Site({ site, fileQuery = "", orderHref }: { site: 
       <div className="card item" key={i}><Img s={m.img} alt={str(m.name)} q={fileQuery} /><div className="row"><b>{str(m.name)}</b><span className="price">{thb(num(m.price))}</span></div>
         <div className="meta">{num(m.spicy) ? "🌶".repeat(Math.min(3, num(m.spicy)!)) : ""} {m.tag ? <span className="tag">{str(m.tag)}</span> : null}{m.soldOut ? <span className="tag">หมดชั่วคราว</span> : null}</div></div>))}</div>
       {canOrder && <p style={{ marginTop: 16 }}><a className="cta" href={orderHref}>สั่งออนไลน์ รับที่ร้าน</a></p>}</Section>,
+    cars: () => <Section id="cars" title="รถในเต็นท์"><div className={variant("cars") === "list" ? "vlist" : "grid"}>{arr<Any>(c.cars.items).map((m, i) => (
+      <div className="card item" key={i}><Img s={m.img} alt={`${str(m.brand)} ${str(m.model)}`} q={fileQuery} />
+        <div className="row"><b>{str(m.brand)} {str(m.model)}</b><span className="price">{m.sold ? "ขายแล้ว" : thb(num(m.price))}</span></div>
+        <div className="meta">ปี {num(m.year) ?? "-"} · {(num(m.mileage) ?? 0).toLocaleString("th-TH")} กม.{m.gear ? ` · ${str(m.gear)}` : ""}{m.fuel ? ` · ${str(m.fuel)}` : ""}</div>
+        {m.sold ? <span className="tag">ขายแล้ว</span> : null}</div>))}</div></Section>,
+    sellcar: () => <Section id="sellcar" title={str(c.sellcar.title) || "อยากขายรถ? ให้เราประเมินราคา"} alt>
+      <p>{str(c.sellcar.note) || "ส่งข้อมูลและรูปรถมาให้เรา ทีมงานติดต่อกลับเพื่อเสนอราคา"}</p>
+      {sellHref ? <a className="cta" href={sellHref}>ส่งข้อมูลรถ</a> : lineUrl ? <a className="cta" href={lineUrl}>ส่งข้อมูลทาง LINE</a> : null}</Section>,
     sets: () => <Section id="sets" title="ชุดคุ้มค่า" alt><div className="grid">{arr<Any>(c.sets.items).map((m, i) => (
       <div className="card item" key={i}><b>{str(m.name)}</b><div className="meta">สำหรับ {num(m.for) ?? "-"} คน</div><div className="row"><span className="price">{thb(num(m.price))}</span>{num(m.was) ? <s className="meta">{thb(num(m.was))}</s> : null}</div></div>))}</div></Section>,
     rooms: () => <Section id="rooms" title="ห้องพัก"><div className="grid">{arr<Any>(c.rooms.items).map((m, i) => (

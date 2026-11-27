@@ -1,7 +1,7 @@
 import "server-only";
 import { q, one } from "./db";
 import { previewQuery } from "@ode/blocks/sign";
-import { BUSINESSES, BLOCK_LABEL, CORE_REQUIRED, BUSINESS_REQUIRED, checkTemplate, checksPass, VARIANTS, type Business, type Check, type TemplateBlock, type TemplateSpec } from "@ode/blocks/templates";
+import { BUSINESSES, BLOCK_LABEL, CORE_REQUIRED, BUSINESS_REQUIRED, BUSINESS_PREFIX, checkTemplate, checksPass, VARIANTS, type Business, type Check, type TemplateBlock, type TemplateSpec } from "@ode/blocks/templates";
 
 export interface TemplateRow {
   id: string; key: string; version: number; name: string; business: Business; status: "draft" | "approved" | "retired";
@@ -49,7 +49,7 @@ export async function createDraft(by: string, input: ReturnType<typeof specFromF
     if (await one(`select 1 from template_versions where key = $1 and status = 'draft'`, [key])) throw new Error(`${key} มีร่างที่ยังไม่อนุมัติอยู่แล้ว แก้ร่างนั้นต่อได้เลย`);
   } else {
     const n = await one<{ n: number }>(`select count(distinct key)::int + 1 n from template_versions where business = $1`, [input.business]);
-    key = `${input.business === "cafe" ? "C" : "R"}${n!.n}`;
+    key = `${BUSINESS_PREFIX[input.business]}${n!.n}`;
     while (await one(`select 1 from template_versions where key = $1`, [key])) key = key.replace(/\d+$/, (d) => String(Number(d) + 1));
   }
   const v = await one<{ v: number }>(`select coalesce(max(version), 0) + 1 v from template_versions where key = $1`, [key]);

@@ -16,7 +16,7 @@ function SpecForm({ t, readOnly }: { t?: T.TemplateRow; readOnly?: boolean }) {
   const blocks = t?.spec.blocks ?? ["hero", "menu", "reviews", "gallery", "hours", "line", "map"].map((type) => ({ type, variant: VARIANTS[type][0] }));
   const required = t?.spec.required ?? [...CORE_REQUIRED, ...BUSINESS_REQUIRED[business]];
   const idx = (type: string) => blocks.findIndex((b) => b.type === type);
-  const always: string[] = [...CORE_REQUIRED, ...BUSINESS_REQUIRED.restaurant, ...BUSINESS_REQUIRED.cafe];
+  const always: string[] = [...CORE_REQUIRED, ...BUSINESS_REQUIRED[business]];
   return (<fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}>
     <div className="f" style={{ marginBottom: 12 }}>
       <label className="sm">ชื่อเทมเพลต <input className="inp" name="name" defaultValue={t?.name ?? ""} required maxLength={60} style={{ maxWidth: 240 }} /></label>

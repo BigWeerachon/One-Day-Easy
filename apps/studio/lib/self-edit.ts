@@ -178,6 +178,7 @@ export async function saveBlock(ctx: PortalCtx, f: { version: number; block: str
   const label = BLOCK_LABEL[f.block] ?? f.block;
   const read = async (fd: { key: string; label: string; kind: string; max?: number; min?: number; maxNum?: number; required?: boolean }, name: string, newName: string) => {
     const raw = f.form.get(name);
+    if (fd.kind === "check") return raw === "1" ? true : undefined;
     if (fd.kind === "image") {
       const img = await f.form.image(newName);
       return img ? await storeImage(ctx, img) : await ownImage(ctx, raw);
