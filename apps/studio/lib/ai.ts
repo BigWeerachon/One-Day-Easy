@@ -152,7 +152,7 @@ export const DraftSchema = z.object({
   theme_primary: z.string().nullable(),
   ops: z.array(z.object({ block: z.string(), data_json: z.string() })),
 });
-const DRAFT_SYSTEM = `คุณร่างเว็บไซต์ฉบับแรกให้ร้านค้าในไทย (ร้านอาหาร คาเฟ่ เต็นท์รถมือสอง ที่พัก/แคมป์) สำหรับทีม One Day Easy
+const DRAFT_SYSTEM = `คุณร่างเว็บไซต์ฉบับแรกให้ร้านค้าในไทย (ร้านอาหาร คาเฟ่ เต็นท์รถมือสอง ที่พัก/แคมป์ และธุรกิจทั่วไปทุกประเภท เช่น คลินิก ช่าง ร้านค้า โรงเรียน บริษัท) สำหรับทีม One Day Easy
 เว็บเก็บเป็น JSON แยกตามบล็อก ใช้ได้เฉพาะบล็อกและฟิลด์ตาม schema นี้:
 ${SCHEMA_DOC}
 
@@ -196,7 +196,7 @@ export const ReviewSchema = z.object({
   issues: z.array(z.object({ severity: z.enum(["block", "minor"]), block: z.string(), problem: z.string(), fix: z.string() })),
   missing_from_customer: z.array(z.string()),
 });
-const REVIEW_SYSTEM = `คุณเป็นผู้ตรวจคุณภาพ (QA) ของ One Day Easy ตรวจเว็บร่างของร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถ ที่พัก)ก่อนส่งให้ลูกค้าตรวจ
+const REVIEW_SYSTEM = `คุณเป็นผู้ตรวจคุณภาพ (QA) ของ One Day Easy ตรวจเว็บร่างของร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถ ที่พัก และธุรกิจทั่วไป) ก่อนส่งให้ลูกค้าตรวจ
 คุณได้รับ: ข้อมูลจริงที่ลูกค้าให้ (<shop>), คำขอแก้ของลูกค้า (ถ้ามี), เนื้อหาเว็บ (<config>) และรูปที่ใช้ในเว็บ
 
 ตรวจตามนี้:
@@ -230,7 +230,7 @@ export async function reviewSite(input: { template: Template; shop: Record<strin
 
 // ---------- Sales Agent: ตอบคำถามลูกค้าในแชทที่ปุ่มตอบไม่ได้ ----------
 export const SalesSchema = z.object({ action: z.enum(["reply", "handoff"]), reply: z.string(), reason: z.string() });
-const SALES_SYSTEM = `คุณเป็นพนักงานขายของ One Day Easy ตอบลูกค้าในแชท LINE · บริการ: รับทำเว็บไซต์ร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถ ที่พัก) และงานตามโจทย์
+const SALES_SYSTEM = `คุณเป็นพนักงานขายของ One Day Easy ตอบลูกค้าในแชท LINE · บริการ: รับทำเว็บไซต์ / landing page ให้ทุกธุรกิจ (มีเทมเพลตเฉพาะร้านอาหาร คาเฟ่ เต็นท์รถ ที่พัก และเทมเพลตทั่วไปสำหรับบริการ สินค้า คอร์สเรียน บริษัท) เลือกเทมเพลตแล้วปรับตามที่ลูกค้าต้องการ และงานตามโจทย์
 ตอบได้เฉพาะจากข้อมูลใน <facts> เท่านั้น
 
 กติกา:

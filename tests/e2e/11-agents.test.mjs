@@ -147,3 +147,23 @@ test("ลูกค้าเต็นท์รถ: Agent ร่างด้วย
   assert.equal(await val(`select agent_status from jobs where id = $1`, [j]), "waiting_customer");
   assert.match((await linePushes(V)).at(-1).text, /รายการรถ/);
 });
+
+test("ลูกค้าธุรกิจทั่วไป (คลินิก): Agent ใช้เทมเพลตทั่วไป G1 ที่อนุมัติแล้ว · ขาดรายการบริการ → ถามลูกค้า", async () => {
+  const V = "Ue2egeneral00000000000000000001";
+  await chat(V, () => lineText(V, "สวัสดีค่ะ"));
+  const c = await val(`select client_id from contacts where value = $1`, [V]);
+  const j = await val(`select id from jobs where client_id = $1`, [c]);
+  await sql(`update clients set name = 'คลินิกทดสอบ', kind = 'คลินิกทันตกรรม', package = 'Basic', phone = '0812345678' where id = $1`, [c]);
+  await sql(`update jobs set stage = 'intake', checklist_done = true, pdpa_consent = true where id = $1`, [j]);
+  await sql(`update jobs set stage = 'template' where id = $1`, [j]);
+  await mockPost("claude", "/__review", "pass");
+  const p = await loginAs("builder");
+  await p.goto(`${URLS.studio}/clients/${c}`);
+  await act(p, p.getByRole("button", { name: "ให้ Agent ทำต่อ" }));
+  const s = (await sql(`select s.template, tv.key, tv.status from jobs jb join sites s on s.id = jb.site_id left join template_versions tv on tv.id = s.template_version_id where jb.id = $1`, [j]))[0];
+  assert.equal(s.template, "G1");
+  assert.equal(s.key, "G1");
+  assert.equal(s.status, "approved");
+  assert.equal(await val(`select agent_status from jobs where id = $1`, [j]), "waiting_customer");
+  assert.match((await linePushes(V)).at(-1).text, /รายการบริการ/);
+});

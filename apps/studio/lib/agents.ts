@@ -8,7 +8,7 @@ import { FONTS, sanitizeTheme } from "@ode/blocks/themes";
 import { previewUrl } from "./preview";
 import { notify } from "./notify";
 import { checkSalesReply, sameOriginOnly } from "./agent-guard";
-import { businessOf, AGENT_TEMPLATE } from "./business";
+import { businessOf, agentTemplateFor } from "./business";
 
 // ทีม Agent ของระบบ (ทุกตัวใช้ Claude · บันทึกทุกครั้งใน agent_runs)
 //   Sales   ตอบคำถามในแชทที่ปุ่มตอบไม่ได้ · ส่งต่อคนเมื่อเกินขอบเขต
@@ -39,6 +39,10 @@ const ASK: Record<string, string> = {
   cars: "ขอรายการรถในเต็นท์ค่ะ (ยี่ห้อ รุ่น ปี เลขไมล์ ราคา พร้อมรูปคันละ 1 รูป)",
   sellcar: "อยากให้ฟอร์มรับซื้อรถบนเว็บเขียนหัวข้อว่าอะไรคะ (เช่น ขายรถให้เรา ประเมินฟรี)",
   rooms: "ขอรายการห้องพักค่ะ (ชื่อห้อง ราคาต่อคืน พักได้กี่ท่าน พร้อมรูป)",
+  services: "ขอรายการบริการพร้อมราคาค่ะ (ชื่อบริการ รายละเอียดสั้นๆ ราคา)",
+  products: "ขอรายการสินค้าพร้อมราคาค่ะ (ชื่อ ราคา พร้อมรูปชิ้นละ 1 รูป)",
+  courses: "ขอรายการคอร์สค่ะ (ชื่อคอร์ส เหมาะกับใคร วันเวลาเรียน ราคา)",
+  pricing: "ขอแพ็กเกจราคาค่ะ (ชื่อแพ็กเกจ ราคาต่อเดือน สิ่งที่ได้)",
 };
 const pdpaText = (shop: string) => `${shop} เก็บข้อมูลที่คุณให้ผ่านเว็บไซต์นี้ (เช่น ชื่อ เบอร์โทร ข้อความ) เพื่อติดต่อกลับและให้บริการเท่านั้น ไม่ขายหรือส่งต่อให้บุคคลอื่น คุณขอดู แก้ไข หรือลบข้อมูลได้โดยติดต่อร้านทาง LINE`;
 
@@ -78,8 +82,10 @@ export async function runDesign(jobId: string, clientId: string): Promise<Design
   const shop = await shopOf(clientId);
   // ธุรกิจที่มีเทมเพลตของตัวเอง (เต็นท์รถ ที่พัก): หน้าตาและชุดสีล็อกตามเทมเพลตที่อนุมัติแล้ว · ไม่ต้องให้ Design เลือก
   const biz = businessOf(typeof shop.type === "string" ? shop.type : null);
-  if (biz === "car_dealer" || biz === "hotel_camp") {
-    const brief = { template: AGENT_TEMPLATE[biz], theme: {}, tone: "", heroPhoto: null, rationale: `ใช้เทมเพลต ${AGENT_TEMPLATE[biz]} ของธุรกิจ${biz === "car_dealer" ? "เต็นท์รถ" : "ที่พัก"} (ชุดสีและฟอนต์ล็อกตามเทมเพลต)`, usedRef: false, dropped: [] as string[] };
+  if (biz !== "restaurant" && biz !== "cafe") {
+    const tpl = agentTemplateFor(typeof shop.type === "string" ? shop.type : null);
+    const label = { car_dealer: "เต็นท์รถ", hotel_camp: "ที่พัก", general: "ธุรกิจทั่วไป" }[biz];
+    const brief = { template: tpl, theme: {}, tone: "", heroPhoto: null, rationale: `ใช้เทมเพลต ${tpl} ของ${label} (ชุดสีและฟอนต์ล็อกตามเทมเพลต)`, usedRef: false, dropped: [] as string[] };
     await q(`update jobs set design_brief = $2 where id = $1`, [jobId, JSON.stringify(brief)]);
     await logRun("design", "designed", { jobId, clientId, detail: { summary: brief.rationale, ...brief } });
     return brief;
@@ -247,7 +253,7 @@ async function salesFacts() {
   const { FREE_EDITS } = await import("./portal");
   const b = (s: number) => `${(s / 100).toLocaleString("th-TH")} บาท`;
   return [
-    "บริการ: ทำเว็บไซต์ร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถมือสอง ที่พัก/แคมป์) ทุกขั้นตอนทำผ่านแชท LINE นี้",
+    "บริการ: ทำเว็บไซต์ / landing page ให้ทุกธุรกิจ เลือกจากเทมเพลตแล้วปรับตามที่ต้องการ (ร้านอาหาร คาเฟ่ เต็นท์รถ ที่พัก คลินิก ช่าง ร้านค้า โรงเรียน บริษัท ฯลฯ) ทุกขั้นตอนทำผ่านแชท LINE นี้",
     "งานตามโจทย์ (เว็บไซต์ออกแบบเฉพาะ งานหน่วยงานภาครัฐ ระบบงาน): ราคาตามขอบเขตงาน ทีมงานสรุปขอบเขตและราคาให้ก่อนเริ่ม · ถ้าลูกค้าถามเรื่องนี้ให้ handoff เพื่อให้ทีมคุยรายละเอียด",
     "ราคา:", ...items.map((i) => `- ${i.name}: ${b(i.price)}${i.recurring ? " ต่อปี" : ""} (${i.code})`),
     depositPercent() ? `มัดจำตอนยืนยันสั่งทำ: ${depositPercent()}% ของราคาแพ็ก ส่วนที่เหลือชำระเมื่ออนุมัติเว็บ` : "ไม่มีมัดจำ: ทำตัวอย่างเว็บให้ดูบนที่อยู่ฟรีก่อน ถ้าถูกใจค่อยชำระเต็มจำนวนตอนอนุมัติ แล้วเว็บขึ้นออนไลน์ (และผูกโดเมนจริงถ้าเลือกแพ็กที่รวมโดเมน)",

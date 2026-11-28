@@ -8,7 +8,7 @@
 import { BLOCKS, validateBlock } from "./blocks.ts";
 import { contrast, FONTS, type Theme } from "./themes.ts";
 
-export const BUSINESSES = { restaurant: "ร้านอาหาร", cafe: "คาเฟ่", car_dealer: "เต็นท์รถมือสอง", hotel_camp: "ที่พัก / แคมป์" } as const;
+export const BUSINESSES = { restaurant: "ร้านอาหาร", cafe: "คาเฟ่", car_dealer: "เต็นท์รถมือสอง", hotel_camp: "ที่พัก / แคมป์", general: "ธุรกิจทั่วไป (Landing page)" } as const;
 export type Business = keyof typeof BUSINESSES;
 
 /** หน้าตาที่บล็อกแต่ละตัวเลือกได้ · ตัวแรกคือค่าเริ่มต้น · เพิ่มหน้าตาใหม่ = เขียนโค้ดใน Engine + เทส */
@@ -18,6 +18,10 @@ export const VARIANTS: Record<string, readonly string[]> = {
   sets: ["cards"],
   cars: ["cards", "list"],
   rooms: ["cards", "list"],
+  services: ["cards", "list"],
+  products: ["cards"],
+  courses: ["cards"],
+  pricing: ["cards"],
   sellcar: ["default"],
   gallery: ["grid", "strip"],
   reviews: ["cards", "quote"],
@@ -29,15 +33,15 @@ export const VARIANT_LABEL: Record<string, string> = {
   quote: "คำพูดเด่น", accordion: "พับเปิด", default: "มาตรฐาน",
 };
 export const BLOCK_LABEL: Record<string, string> = {
-  hero: "หน้าแรก", menu: "เมนู", sets: "ชุดคุ้มค่า", cars: "รถในเต็นท์", rooms: "ห้องพัก", sellcar: "ฟอร์มขายรถให้เรา", gallery: "แกลเลอรี", reviews: "รีวิว", faq: "คำถามที่พบบ่อย",
+  hero: "หน้าแรก", menu: "เมนู", sets: "ชุดคุ้มค่า", cars: "รถในเต็นท์", rooms: "ห้องพัก", sellcar: "ฟอร์มขายรถให้เรา", services: "บริการ", products: "สินค้า", courses: "คอร์ส", pricing: "แพ็กเกจราคา", gallery: "แกลเลอรี", reviews: "รีวิว", faq: "คำถามที่พบบ่อย",
   hours: "เวลาเปิด", line: "LINE", map: "แผนที่", promptpay: "พร้อมเพย์", legal: "PDPA / ข้อกฎหมาย",
 };
 /** บล็อกที่ทุกเทมเพลตต้องมีและลูกค้าปิดไม่ได้: สิ่งที่ลูกค้าของร้านต้องเห็นเสมอ */
 export const CORE_REQUIRED = ["hero", "line", "hours", "map"] as const;
 /** บล็อกที่เทมเพลตของแต่ละธุรกิจต้องมี */
-export const BUSINESS_REQUIRED: Record<Business, string[]> = { restaurant: ["menu"], cafe: ["menu"], car_dealer: ["cars", "sellcar"], hotel_camp: ["rooms"] };
+export const BUSINESS_REQUIRED: Record<Business, string[]> = { restaurant: ["menu"], cafe: ["menu"], car_dealer: ["cars", "sellcar"], hotel_camp: ["rooms"], general: [] };
 /** ตัวอักษรนำหน้ารหัสเทมเพลตของแต่ละธุรกิจ */
-export const BUSINESS_PREFIX: Record<Business, string> = { restaurant: "R", cafe: "C", car_dealer: "D", hotel_camp: "H" };
+export const BUSINESS_PREFIX: Record<Business, string> = { restaurant: "R", cafe: "C", car_dealer: "D", hotel_camp: "H", general: "G" };
 
 /** ชุดสีที่ผ่านการตรวจคอนทราสต์แล้ว · ทีมเลือกจากนี้เท่านั้น */
 export interface Palette { id: string; name: string; primary: string; accent: string; bg: string; surface: string; text: string; dark?: boolean }
@@ -100,7 +104,7 @@ export const CONFIG_META = ["theme", "hidden", "brand"] as const;
 export type SampleKind = "sample" | "long" | "empty";
 const L = (n: number, unit = "ก") => unit.repeat(n);
 export function sampleConfig(business: Business, kind: SampleKind): Record<string, unknown> {
-  const cafe = business === "cafe", stay = business === "hotel_camp";
+  const cafe = business === "cafe", stay = business === "hotel_camp", gen = business === "general";
   const room = (i: number) => ({ name: ["River Loft", "Garden Villa", "Family Villa", "River Glamp"][i % 4], price: [3200, 3900, 7500, 2400][i % 4], guests: [2, 2, 6, 2][i % 4] });
   const car = (i: number) => ({ brand: "Toyota", model: ["Yaris Ativ", "Corolla Cross", "Hilux Revo", "Fortuner"][i % 4], year: 2019 + (i % 5), mileage: 35000 + i * 12000, price: 459000 + i * 85000, gear: "ออโต้" });
   if (kind === "empty") return {
@@ -108,6 +112,8 @@ export function sampleConfig(business: Business, kind: SampleKind): Record<strin
     cars: { items: [{ brand: "Honda", model: "City", year: 2018, mileage: 0, price: 0 }] }, sellcar: {},
     rooms: { items: [{ name: "ห้อง", price: 0, guests: 1 }] },
     menu: { items: [{ name: "เมนู", price: 0 }] },
+    services: { items: [{ name: "บริการ", price: 0 }] }, products: { items: [{ name: "สินค้า", price: 0 }] },
+    courses: { items: [{ name: "คอร์ส", price: 0 }] }, pricing: { plans: [{ name: "แพ็กเกจ", monthly: 0 }] },
     hours: { days: "ทุกวัน", open: "08:00", close: "17:00" }, line: { id: "@shop" }, map: { lat: 13.75, lng: 100.5, address: "-" },
   };
   if (kind === "long") return {
@@ -116,6 +122,10 @@ export function sampleConfig(business: Business, kind: SampleKind): Record<strin
     sets: { items: Array.from({ length: 6 }, () => ({ name: L(48), for: 10, price: 999999, was: 1999999 })) },
     cars: { items: Array.from({ length: 60 }, (_, i) => ({ brand: L(24), model: L(32), year: 2100, mileage: 2_000_000, price: 99_999_999 - i, gear: L(10), fuel: L(10), color: L(10), sold: i % 3 === 0 })) },
     sellcar: { title: L(48), note: L(200) },
+    services: { items: Array.from({ length: 12 }, (_, i) => ({ name: L(32), desc: L(90), price: 999999 + i, duration: L(12) })) },
+    products: { items: Array.from({ length: 60 }, (_, i) => ({ name: L(48), price: 999999 + i, stock: i % 5 })) },
+    courses: { items: Array.from({ length: 12 }, (_, i) => ({ name: L(48), price: 999999 + i, age: L(12), schedule: L(20) })) },
+    pricing: { plans: Array.from({ length: 4 }, (_, i) => ({ name: L(32), monthly: 999999 + i, yearly: 9999999, features: Array.from({ length: 8 }, () => L(40)) })) },
     rooms: { items: Array.from({ length: 12 }, (_, i) => ({ name: L(48), price: 999999 + i, guests: 20, img: [] })) },
     gallery: { images: Array.from({ length: 12 }, () => ({ src: "", alt: L(120) })) },
     reviews: { rating: 5, count: 99999, source: L(30), items: Array.from({ length: 6 }, () => ({ name: L(30), text: L(240) })) },
@@ -124,17 +134,22 @@ export function sampleConfig(business: Business, kind: SampleKind): Record<strin
     line: { id: "@" + "a".repeat(30) }, map: { lat: 13.75, lng: 100.5, address: L(120) }, promptpay: { id: "0812345678" }, legal: { pdpa: L(2000) },
   };
   return {
-    hero: stay ? { title: "บ้านพักริมแม่น้ำ", subtitle: "บ้านพักและเต็นท์ติดแอร์ริมแม่น้ำ รวมอาหารเช้าทุกห้อง", cta: "จองผ่าน LINE" }
+    hero: gen ? { title: "คลินิกฟันยิ้มสวย", subtitle: "ตรวจ ขูดหินปูน จัดฟัน โดยทันตแพทย์ประสบการณ์ 10 ปี นัดผ่าน LINE ได้ทันที", cta: "นัดหมายผ่าน LINE" }
+      : stay ? { title: "บ้านพักริมแม่น้ำ", subtitle: "บ้านพักและเต็นท์ติดแอร์ริมแม่น้ำ รวมอาหารเช้าทุกห้อง", cta: "จองผ่าน LINE" }
       : { title: cafe ? "บ้านกาแฟริมคลอง" : "ครัวคุณยาย", subtitle: cafe ? "กาแฟคั่วเอง ขนมอบสดทุกเช้า" : "อาหารไทยรสมือแม่ ปรุงสดทุกจาน", cta: "สั่งผ่าน LINE" },
     rooms: { items: Array.from({ length: 4 }, (_, i) => room(i)) },
     menu: { items: (cafe ? [["ลาเต้เย็น", 65], ["อเมริกาโน่", 55], ["ครัวซองต์เนยสด", 75], ["มัทฉะลาเต้", 75]] : [["ผัดกะเพราหมูกรอบ", 70], ["ต้มยำกุ้งน้ำข้น", 150], ["แกงเขียวหวานไก่", 80], ["ข้าวผัดปู", 90]]).map(([name, price]) => ({ name, price })) },
+    services: { items: [{ name: "ตรวจและขูดหินปูน", desc: "ตรวจสุขภาพฟัน ขูดหินปูน ขัดฟัน", price: 800, duration: "45 นาที" }, { name: "อุดฟัน", desc: "อุดฟันสีเหมือนฟัน", price: 1000, duration: "30 นาที" }, { name: "ฟอกสีฟัน", desc: "ฟอกสีฟันในคลินิก", price: 6500, duration: "90 นาที" }] },
+    products: { items: [{ name: "แปรงสีฟันขนนุ่ม", price: 120 }, { name: "ไหมขัดฟัน", price: 90 }, { name: "ยาสีฟันฟลูออไรด์", price: 150, stock: 0 }] },
+    courses: { items: [{ name: "คอร์สภาษาอังกฤษพื้นฐาน", price: 3500, age: "อายุ 7–12 ปี", schedule: "เสาร์ 09:00–11:00" }, { name: "คอร์สสนทนา", price: 4500, age: "ผู้ใหญ่", schedule: "อังคาร/พฤหัส 19:00" }] },
+    pricing: { plans: [{ name: "เริ่มต้น", monthly: 990, features: ["ดูแล 1 ครั้ง/เดือน", "ตอบแชทใน 24 ชม."] }, { name: "มืออาชีพ", monthly: 2490, yearly: 24900, features: ["ดูแล 4 ครั้ง/เดือน", "ตอบแชทใน 2 ชม.", "รายงานผลรายเดือน"] }] },
     sets: { items: [{ name: "ชุดอิ่มสองคน", for: 2, price: 299, was: 360 }] },
     cars: { items: Array.from({ length: 6 }, (_, i) => ({ ...car(i), ...(i === 5 ? { sold: true } : {}) })) },
     sellcar: { title: "อยากขายรถ? ให้เราประเมินราคาฟรี", note: "ส่งรูปและข้อมูลรถ ทีมงานติดต่อกลับภายใน 24 ชั่วโมง" },
     gallery: { images: Array.from({ length: 4 }, (_, i) => ({ src: "", alt: `บรรยากาศร้าน ${i + 1}` })) },
     reviews: { rating: 4.8, count: 128, source: "Google", items: [{ name: "คุณมิน", text: "อร่อย บรรยากาศดี จะมาอีก" }] },
     faq: { items: [{ q: "มีที่จอดรถไหม", a: "มีที่จอดหน้าร้าน 5 คัน" }] },
-    hours: stay ? { days: "เช็กอิน–เช็กเอาต์", open: "14:00", close: "12:00" } : { days: "ทุกวัน", open: cafe ? "07:30" : "10:00", close: cafe ? "18:00" : "21:00" },
+    hours: gen ? { days: "จันทร์–เสาร์", open: "09:00", close: "19:00" } : stay ? { days: "เช็กอิน–เช็กเอาต์", open: "14:00", close: "12:00" } : { days: "ทุกวัน", open: cafe ? "07:30" : "10:00", close: cafe ? "18:00" : "21:00" },
     line: { id: "@shopdemo" }, map: { lat: 13.7563, lng: 100.5018, address: "ถนนตัวอย่าง กรุงเทพฯ" },
     promptpay: { id: "0812345678" }, legal: { pdpa: "ร้านเก็บข้อมูลเท่าที่จำเป็นเพื่อรับออเดอร์เท่านั้น" },
   };
@@ -186,6 +201,18 @@ export const EDIT_FIELDS: Record<string, EditSpec> = {
   rooms: { list: { key: "items", max: 12, label: "ห้องพัก" }, fields: [
     { key: "name", label: "ชื่อห้อง", kind: "text", max: 48, required: true }, { key: "price", label: "ราคาต่อคืน (บาท)", kind: "number", min: 0, maxNum: 1_000_000, required: true },
     { key: "guests", label: "พักได้กี่ท่าน", kind: "number", min: 1, maxNum: 50, required: true }] },
+  services: { list: { key: "items", max: 12, label: "บริการ" }, fields: [
+    { key: "name", label: "ชื่อบริการ", kind: "text", max: 32, required: true }, { key: "desc", label: "รายละเอียดสั้นๆ", kind: "text", max: 90 },
+    { key: "price", label: "ราคา (บาท)", kind: "number", min: 0, maxNum: 10_000_000, required: true }, { key: "duration", label: "ระยะเวลา เช่น 45 นาที", kind: "text", max: 20 }] },
+  products: { list: { key: "items", max: 60, label: "สินค้า" }, fields: [
+    { key: "name", label: "ชื่อสินค้า", kind: "text", max: 48, required: true }, { key: "price", label: "ราคา (บาท)", kind: "number", min: 0, maxNum: 10_000_000, required: true },
+    { key: "img", label: "รูป", kind: "image" }, { key: "stock", label: "คงเหลือ (0 = หมด)", kind: "number", min: 0, maxNum: 1_000_000 }] },
+  courses: { list: { key: "items", max: 12, label: "คอร์ส" }, fields: [
+    { key: "name", label: "ชื่อคอร์ส", kind: "text", max: 48, required: true }, { key: "price", label: "ราคา (บาท)", kind: "number", min: 0, maxNum: 10_000_000, required: true },
+    { key: "age", label: "เหมาะกับ เช่น อายุ 7–12 ปี", kind: "text", max: 30 }, { key: "schedule", label: "วันเวลาเรียน", kind: "text", max: 40 }] },
+  pricing: { list: { key: "plans", max: 4, label: "แพ็กเกจ" }, fields: [
+    { key: "name", label: "ชื่อแพ็กเกจ", kind: "text", max: 32, required: true }, { key: "monthly", label: "ราคาต่อเดือน (บาท)", kind: "number", min: 0, maxNum: 10_000_000, required: true },
+    { key: "yearly", label: "ราคาต่อปี (ไม่บังคับ)", kind: "number", min: 0, maxNum: 100_000_000 }] },
   sellcar: { fields: [{ key: "title", label: "หัวข้อ", kind: "text", max: 48 }, { key: "note", label: "คำอธิบายสั้นๆ", kind: "longtext", max: 200 }] },
   line: { fields: [{ key: "id", label: "LINE ID (ขึ้นต้นด้วย @)", kind: "text", max: 40, required: true }] },
   map: { fields: [{ key: "address", label: "ที่อยู่", kind: "text", max: 120, required: true }] },

@@ -3,8 +3,8 @@ export type Level = "ok" | "warn" | "fail";
 export interface Check { group: string; name: string; level: Level; detail: string }
 
 /** migration ล่าสุดที่โค้ดนี้ต้องการ · business.test ตรวจว่าตรงกับไฟล์สุดท้ายใน supabase/migrations */
-export const LATEST_MIGRATION = "0019_hotel_camp.sql";
-export const REQUIRED_TEMPLATES = ["R1", "C1", "D1", "H1"];
+export const LATEST_MIGRATION = "0020_general_landing.sql";
+export const REQUIRED_TEMPLATES = ["R1", "C1", "D1", "H1", "G1", "G2", "G3", "G4"];
 
 type Env = Record<string, string | undefined>;
 const REQUIRED: [string, string][] = [

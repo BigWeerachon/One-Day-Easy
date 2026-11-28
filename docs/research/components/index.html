@@ -1,0 +1,465 @@
+<title>คลังชิ้นส่วนเทมเพลต</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=Noto+Serif+Thai:wght@400;500&family=Newsreader:opsz,wght@6..72,400&family=Hanken+Grotesk:wght@400;500&display=swap">
+<style>
+/* Layout: sticky picker bar + group tabs, then a wrapping grid of live mini previews (4 → 1 columns) */
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --fg:#16181d; --mut:#5b6270; --line:#dde0e6;
+  --acc:#0b63ce; --acc-fg:#ffffff; --sel:#e7f0fc;
+  /* preview site palette */
+  --p:#1f2b4d; --pa:#f7941d; --pb:#ffffff; --ps:#f4f4f2; --pt:#1f2b4d; --pm:#5a6275; --pl:#e3e3df; --ph:#cfd3da; --line-g:#06c755;
+  --ui:"Hanken Grotesk","IBM Plex Sans Thai",system-ui,sans-serif; --hd:"Newsreader","Noto Serif Thai",Georgia,serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1115; --panel:#171a20; --fg:#eceef2; --mut:#9aa2b1; --line:#2a2f38; --acc:#5aa2ff; --acc-fg:#08111f; --sel:#16263d;
+  --p:#9fb0dc; --pa:#f7941d; --pb:#14171c; --ps:#1c2027; --pt:#eef0f4; --pm:#a3abbb; --pl:#2c323c; --ph:#323946; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --panel:#171a20; --fg:#eceef2; --mut:#9aa2b1; --line:#2a2f38; --acc:#5aa2ff; --acc-fg:#08111f; --sel:#16263d;
+  --p:#9fb0dc; --pa:#f7941d; --pb:#14171c; --ps:#1c2027; --pt:#eef0f4; --pm:#a3abbb; --pl:#2c323c; --ph:#323946; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--ui);margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{padding-block:28px 8px}
+h1{font:600 clamp(24px,3.4vw,34px)/1.2 var(--hd);margin:0 0 6px;text-wrap:balance}
+.lead{color:var(--mut);max-width:70ch;margin:0}
+.research{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.research summary{cursor:pointer;font-weight:600}
+.research ul{margin:10px 0 0;padding-left:20px;color:var(--mut)}
+.research li{margin:4px 0}
+.research a{color:var(--acc)}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line);margin-top:16px}
+.bar .wrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-block:10px}
+.tabs{display:flex;gap:6px;overflow-x:auto;flex:1 1 420px;min-width:0;padding-bottom:2px}
+.tab{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:999px;padding:6px 12px;font:500 13px var(--ui);white-space:nowrap;cursor:pointer}
+.tab[aria-pressed="true"]{background:var(--acc);color:var(--acc-fg);border-color:var(--acc)}
+.tab .n{opacity:.7;margin-left:4px;font-variant-numeric:tabular-nums}
+.count{font-variant-numeric:tabular-nums;color:var(--mut);font-size:14px}
+.btn{border:0;background:var(--acc);color:var(--acc-fg);border-radius:8px;padding:8px 14px;font:600 14px var(--ui);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn:focus-visible,.tab:focus-visible,.card input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.out{width:100%;display:none;font:13px/1.5 ui-monospace,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--fg)}
+.out.show{display:block}
+section.grp{padding-block:24px 8px}
+section.grp h2{font:600 22px/1.3 var(--hd);margin:0}
+section.grp .why{color:var(--mut);margin:4px 0 14px;max-width:80ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.card{transition:transform .18s ease,box-shadow .18s ease;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card.on{border-color:var(--acc);background:var(--sel)}
+.card label{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;cursor:pointer;border-top:1px solid var(--line)}
+.card input{margin-top:3px;width:16px;height:16px;accent-color:var(--acc)}
+.card .id{font:600 12px ui-monospace,monospace;color:var(--acc);letter-spacing:.02em}
+.card .nm{font-weight:600;font-size:14px}
+.card .nt{color:var(--mut);font-size:12.5px;display:block}
+.card .hot{display:inline-block;font-size:11px;font-weight:600;border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:0 5px;margin-left:4px;vertical-align:1px}
+/* ---------- preview frame (a phone-ish slice of a customer site) ---------- */
+.pv{background:var(--pb);color:var(--pt);font:11px/1.45 var(--ui);height:190px;overflow:hidden;position:relative;padding:10px}
+.pv *{box-sizing:border-box}
+.pv h3{font:400 16px/1.25 var(--hd);letter-spacing:-.01em;margin:0 0 4px;color:var(--pt)}
+.pv h4{font:500 12px/1.3 var(--hd);margin:0 0 2px}
+.pv p{margin:0;color:var(--pm)}
+.pv .b{display:inline-block;background:var(--p);color:#fff;border-radius:4px;transition:transform .15s;padding:4px 9px;font-weight:600;font-size:10.5px}
+.pv .b.o{background:transparent;color:var(--p);border:1px solid var(--p)}
+.pv .b.l{background:var(--line-g)}
+.pv .b.a{background:var(--pa);color:#1b1300}
+.pv .img{background:var(--ph);border-radius:4px;position:relative;overflow:hidden}
+.pv .img::after{content:"";position:absolute;inset:auto 0 0 0;height:38%;background:color-mix(in srgb,var(--p) 14%,transparent)}
+.pv .sf{background:var(--ps);border:1px solid var(--pl);border-radius:8px;padding:7px}
+.pv .row{display:flex;gap:6px;align-items:center}
+.pv .col{display:flex;flex-direction:column;gap:4px}
+.pv .g2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pv .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pv .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.pv .sp{flex:1}
+.pv .m{color:var(--pm)}
+.pv .pr{color:var(--p);font-weight:700}
+.pv .tag{display:inline-block;background:color-mix(in srgb,var(--p) 14%,transparent);color:var(--p);border-radius:999px;padding:1px 7px;font-size:9.5px;font-weight:600}
+.pv .ln{height:6px;border-radius:3px;background:var(--pl)}
+.pv .dot{width:22px;height:22px;border-radius:50%;background:var(--pl);flex:none}
+.pv .star{color:var(--pa);letter-spacing:1px}
+.pv .dk{background:#0f1218;color:#f2f4f7}
+.pv .dk p,.pv .dk .m{color:#b8c0cc}
+.pv .ic{width:20px;height:20px;border-radius:6px;background:color-mix(in srgb,var(--p) 18%,transparent);color:var(--p);display:grid;place-items:center;font-weight:700;font-size:10px;flex:none}
+.pv .big{font:700 20px/1 var(--hd);color:var(--p)}
+.pv .c{text-align:center}
+.pv .line-fab{position:absolute;right:10px;bottom:10px;background:var(--line-g);color:#fff;border-radius:999px;padding:6px 10px;font-weight:700;font-size:10px;box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(31,43,77,.10)}
+.card:hover .pv .img{transform:scale(1.02);transition:transform .3s}
+.pv .b:hover{transform:translateY(-1px)}.pv .b:active{transform:translateY(1px)}
+.card .bad{display:block;margin-top:4px;font-size:11.5px;color:#b45309}
+@media (max-width:420px){.grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.card,.card:hover,.card:hover .pv .img{transform:none;transition:none}}
+</style>
+
+<header class="top"><div class="wrap">
+  <h1>คลังชิ้นส่วนเทมเพลต One Day Easy</h1>
+  <p class="lead">ชิ้นส่วน 12 กลุ่ม กลุ่มละ 20 แบบ รวม 240 ชิ้น สำหรับประกอบเป็นเทมเพลต landing page ทุกธุรกิจ ติ๊กเลือกแบบที่ต้องการ แล้วกด "คัดลอกรายการที่เลือก" ส่งรหัสกลับมาในแชท ป้าย <span class="hot" style="border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:0 5px;font-size:11px;font-weight:600">นิยม</span> คือแบบที่งานวิจัยชี้ว่าใช้กันมากในไทย</p>
+  <details class="research"><summary>สรุปงานวิจัยก่อนออกแบบ (ไทย + ทั่วโลก 2026)</summary>
+    <ul>
+      <li><b>มือถือมาก่อน</b> คนไทยเปิดเว็บร้านจากมือถือเป็นหลัก ทุกชิ้นจึงออกแบบให้อ่านได้ที่ความกว้างโทรศัพท์ (<a href="https://realspace-marketing.vercel.app/blog/website-conversion-tips-chiang-mai" target="_blank" rel="noopener">Realspace</a>)</li>
+      <li><b>ปุ่ม LINE ต้องเห็นตลอด</b> ปุ่มลอยมุมล่าง และกดแล้วเปิดแชททันที ได้ผลกว่าการให้กรอกอีเมล (<a href="https://sennalabs.com/blog/turning-web-visitors-into-loyal-contacts-using-line-oa-integration" target="_blank" rel="noopener">Senna Labs</a>)</li>
+      <li><b>รีวิวและหลักฐานอยู่ใกล้หัวเว็บ</b> แนวโน้ม 2026 วางคะแนน/รีวิวในส่วนหัว และกระจายรีวิวทั่วหน้า (<a href="https://www.zoho.com/landingpage/landing-page-design-trends.html" target="_blank" rel="noopener">Zoho</a>, <a href="https://www.saasframe.io/blog/10-saas-landing-page-trends-for-2026-with-real-examples" target="_blank" rel="noopener">SaaSFrame</a>)</li>
+      <li><b>Bento grid</b> เป็นเลย์เอาต์ยอดนิยมของส่วนจุดเด่น/บริการ (<a href="https://www.b12.io/resource-center/website-design/web-design-guide-bento-grids-and-kinetic-typography/" target="_blank" rel="noopener">B12</a>)</li>
+      <li><b>ราคา 2–3 แพ็กเกจ ไฮไลต์แพ็กแนะนำ</b> เป็นรูปแบบที่ใช้สม่ำเสมอที่สุด</li>
+      <li><b>รูปจริงแทนรูปสต็อก สีสดคอนทราสต์สูง และโหมดมืด</b> (<a href="https://www.figma.com/th-th/resource-library/web-design-trends/" target="_blank" rel="noopener">Figma</a>, <a href="https://www.moburst.com/blog/landing-page-design-trends-2026/" target="_blank" rel="noopener">Moburst</a>)</li>
+      <li><b>ปรับตาม Taste Skill แล้ว:</b> ชุดสีกรมท่า+ส้มที่สกิลสุ่มให้คลินิก, หัวข้อ Newsreader/Noto Serif Thai + เนื้อหา Hanken Grotesk/IBM Plex Sans Thai, พื้นเรียบไม่ไล่สี, การ์ดยกขึ้น 2px และปุ่มขยับเมื่อชี้, ไม่มีเบอร์โทร/เลขใบอนุญาต/เลขภาษีจริง, แบบที่ขัดกฎขึ้นป้าย ⚠ ไว้ (รหัสเดิมไม่เปลี่ยน) · รูปจริงยังเป็นช่องสีเรียบ เพราะเครื่องนี้ต่อคลังรูป Wikimedia ไม่ได้</li>
+      <li><b>ข้อจำกัด:</b> แหล่งข้อมูลเฉพาะตลาดไทยมีน้อย ส่วนใหญ่เป็นบล็อกเอเจนซี ใช้เป็นทิศทาง ไม่ใช่ตัวเลขยืนยัน</li>
+    </ul>
+  </details>
+</div></header>
+
+<div class="bar"><div class="wrap">
+  <div class="tabs" id="tabs" role="toolbar" aria-label="กลุ่มชิ้นส่วน"></div>
+  <span class="count" id="count">เลือก 0 ชิ้น</span>
+  <button class="btn ghost" id="clear" type="button">ล้าง</button>
+  <button class="btn" id="copy" type="button">คัดลอกรายการที่เลือก</button>
+  <textarea class="out" id="out" rows="3" readonly aria-label="รหัสที่เลือก"></textarea>
+</div></div>
+
+<main class="wrap" id="main"></main>
+
+<script>
+const B="คลินิกฟันยิ้มสวย";
+const BAD={"HDR-09": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "HDR-08": "ข้อความทับรูปเต็มจอ ใช้ได้เมื่อมีรูปจริงคุณภาพสูง", "HERO-06": "วิดีโอพื้นหลังเป็นเอฟเฟกต์ ไม่ใช้กับร้าน/บริการ", "HERO-09": "ครึ่งสีเต็มบล็อก ใช้แถบสีแบรนด์ได้แค่ส่วนเดียวต่อหน้า", "HERO-11": "ตัวอักษรใหญ่โดยไม่มีรูป ใช้เมื่อไม่มีรูปเลยเท่านั้น", "HERO-13": "สไลด์ภาพ (carousel) ห้ามใช้", "HERO-17": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "HERO-20": "พื้นไล่สีห้ามใช้กับร้าน/บริการ", "HERO-07": "ฟอร์มในหน้าแรก ให้ใช้ปุ่มหลักเดียว", "SVC-06": "แท็บสลับเนื้อหา ห้ามใช้", "SVC-17": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "SVC-15": "อีโมจิแทนไอคอนจริง ห้ามใช้", "PRD-15": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "PRD-16": "นับถอยหลังเร่งเร้า ขัดหลักไม่สร้างแรงกดดันปลอม", "PRD-08": "แท็บสลับเนื้อหา ห้ามใช้", "PRC-09": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "PRC-12": "อีโมจิแทนไอคอนจริง ห้ามใช้", "PRC-03": "สวิตช์สลับเนื้อหา ใช้เฉพาะเว็บซอฟต์แวร์", "REV-04": "สไลด์รีวิว (carousel) ห้ามใช้", "REV-12": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "REV-16": "แถบเลื่อนอัตโนมัติ ต้องมีปุ่มหยุด และห้ามบนร้าน/บริการ", "GAL-12": "รูปเอียง (tilt) ห้ามใช้", "GAL-18": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "GAL-08": "แท็บสลับเนื้อหา ห้ามใช้", "GAL-06": "คำบรรยายใต้รูป ห้ามใช้", "TRU-08": "แถบสีแบรนด์ใช้ได้แค่ส่วนเดียวต่อหน้า", "TRU-13": "ตัวเลขวิ่งนับเป็นลูปของเว็บเทค", "STP-07": "แถบสีแบรนด์ใช้ได้แค่ส่วนเดียวต่อหน้า", "STP-17": "แท็บสลับเนื้อหา ห้ามใช้", "STP-19": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "STP-15": "แผนภาพวงกลมใช้กับเว็บเทค", "FAQ-03": "แท็บสลับเนื้อหา ห้ามใช้", "FAQ-11": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "CTA-15": "ป๊อปอัปขัดจังหวะผู้ใช้ ห้ามใช้", "CTA-16": "พื้นมืดใช้กับเว็บเทคเท่านั้น", "CTA-18": "นับถอยหลังเร่งเร้า ขัดหลักไม่สร้างแรงกดดันปลอม", "CTA-10": "ข้อความทับรูป ใช้ได้เมื่อมีรูปจริงคุณภาพสูง"};
+const nav=(x="")=>`<div class="row" style="${x}"><b style="font:600 12px var(--hd)">${B}</b><span class="sp"></span>`;
+const L=(w=100)=>`<div class="ln" style="width:${w}%"></div>`;
+const svc=["ขูดหินปูน","อุดฟัน","ฟอกสีฟัน","จัดฟันใส","รากฟันเทียม","ตรวจเด็ก"];
+const price=["800","1,000","6,500","45,000","35,000","500"];
+const G=[];
+const add=(k,name,why,items)=>G.push({k,name,why,items});
+
+/* 1. HEADER */
+add("HDR","ส่วนหัว / เมนู","แถบบนสุดของเว็บ มีชื่อร้านและปุ่มติดต่อ เว็บร้านไทยส่วนใหญ่ใช้แบบชื่อซ้าย ปุ่ม LINE ขวา",[
+["ชื่อซ้าย ปุ่ม LINE ขวา","เรียบ อ่านง่ายบนมือถือ",1,nav()+`<span class="b l">แอด LINE</span></div>`],
+["โลโก้กลาง","สำหรับแบรนด์ที่อยากเด่นชื่อ",0,`<div class="c"><div class="dot" style="margin:0 auto 4px;background:var(--p)"></div><b>${B}</b></div>`],
+["เมนูแฮมเบอร์เกอร์","เมนูหลายหน้า พับเก็บได้",1,nav()+`<b style="font-size:16px">☰</b></div>`],
+["เมนูข้อความแนวนอน","สำหรับจอใหญ่",0,nav()+`<span class="m">บริการ</span><span class="m">ราคา</span><span class="m">รีวิว</span></div>`],
+["แถบประกาศบนสุด","โปรโมชันหรือเวลาเปิด",1,`<div style="background:var(--p);color:#fff;margin:-10px -10px 8px;padding:5px 10px;font-size:10px">ลด 20% ขูดหินปูน ถึง 31 ธ.ค.</div>`+nav()+`<span class="b">จองคิว</span></div>`],
+["เบอร์โทรเด่น","ธุรกิจที่ลูกค้าโทรหาบ่อย",1,nav()+`<span class="pr">☎ โทรหาเรา</span></div>`],
+["สองปุ่ม โทร + LINE","ให้เลือกช่องทางเอง",1,nav()+`<span class="b o">โทร</span><span class="b l">LINE</span></div>`],
+["แถบโปร่งใสบนรูป","วางทับรูปหน้าแรก",0,`<div class="img" style="height:120px;padding:8px">`+nav("color:#fff")+`<span class="b l">LINE</span></div></div>`],
+["หัวพื้นสีเข้ม","แบรนด์หรู/กลางคืน",0,`<div class="dk" style="margin:-10px;padding:12px">`+nav()+`<span class="b a">จอง</span></div></div>`],
+["แถบล่างแบบแอป","เมนูไอคอนล่างจอแบบแอปมือถือ",0,`<div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid var(--pl);display:flex;justify-content:space-around;padding:8px;background:var(--pb)"><span>⌂<br>หน้าแรก</span><span>☰<br>บริการ</span><span>★<br>รีวิว</span><span style="color:var(--line-g)">●<br>LINE</span></div>`],
+["หัวเว็บพร้อมช่องค้นหา","ร้านค้าที่มีสินค้าเยอะ",0,nav()+`</div><div class="sf" style="margin-top:6px" ><span class="m">⌕ ค้นหาสินค้า</span></div>`],
+["หัวสองชั้น","ชั้นบนข้อมูลติดต่อ ชั้นล่างเมนู",0,`<div class="row m" style="font-size:9.5px;margin-bottom:5px"><span>☎ โทรหาเรา</span><span class="sp"></span><span>เปิด 9:00–19:00</span></div>`+nav()+`<span class="m">บริการ</span><span class="m">ติดต่อ</span></div>`],
+["โลโก้ใหญ่ + สโลแกน","ร้านที่มีเรื่องเล่า",0,`<b style="font:700 18px var(--hd)">${B}</b><p>ดูแลรอยยิ้มทั้งครอบครัว</p>`],
+["หัวแคปซูลลอย","ดูทันสมัย แยกจากพื้นหลัง",0,`<div class="row sf" style="border-radius:999px;padding:6px 10px"><b>${B}</b><span class="sp"></span><span class="b l">LINE</span></div>`],
+["ภาษาไทย / EN","ร้านที่มีลูกค้าต่างชาติ",1,nav()+`<span class="tag">TH</span><span class="m">EN</span><span class="b l">LINE</span></div>`],
+["หัวพร้อมสถานะเปิด/ปิด","บอกว่าตอนนี้เปิดอยู่ไหม",1,nav()+`<span class="tag" style="color:#16a34a;background:#16a34a22">● เปิดอยู่</span></div>`],
+["หัวพร้อมตะกร้า","ร้านค้าออนไลน์",0,nav()+`<span>🛒<sup class="pr">2</sup></span></div>`],
+["หัวมินิมอลไม่มีปุ่ม","ใช้คู่กับปุ่ม LINE ลอย",0,nav()+`</div><div class="line-fab">LINE</div>`],
+["หัวพร้อมคะแนนรีวิว","หลักฐานตั้งแต่บรรทัดแรก",1,nav()+`<span class="star">★★★★★</span><b>4.9</b></div>`],
+["หัวกึ่งกลางเมนูใต้ชื่อ","แบรนด์เรียบหรู",0,`<div class="c"><b style="font:600 14px var(--hd)">${B}</b><div class="row" style="justify-content:center;gap:10px;margin-top:4px"><span class="m">บริการ</span><span class="m">ราคา</span><span class="m">ติดต่อ</span></div></div>`],
+]);
+
+/* 2. HERO */
+const hT=`<h3>ฟันสวย ยิ้มมั่นใจ</h3><p>ทันตแพทย์ประสบการณ์ 10 ปี นัดคิวผ่าน LINE ได้ทันที</p>`;
+add("HERO","หน้าแรก (Hero)","ส่วนแรกที่ลูกค้าเห็น ต้องบอกว่าทำอะไร ให้ใคร และกดติดต่อได้ทันที",[
+["ข้อความซ้าย รูปขวา","แบบคลาสสิก ใช้มากที่สุด",1,`<div class="g2" style="align-items:center">`+`<div class="col">${hT}<span class="b l" style="width:max-content">นัดผ่าน LINE</span></div><div class="img" style="height:140px"></div></div>`],
+["รูปเต็มจอ ข้อความทับ","ภาพสวยสร้างอารมณ์",1,`<div class="img" style="height:170px;padding:14px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff"><h3 style="color:#fff">ฟันสวย ยิ้มมั่นใจ</h3><span class="b l" style="width:max-content">นัดผ่าน LINE</span></div>`],
+["กึ่งกลาง ข้อความใหญ่","แบรนด์ที่ไม่มีรูปดีๆ",0,`<div class="c col" style="align-items:center;padding-top:20px"><h3 style="font-size:19px">ฟันสวย ยิ้มมั่นใจ</h3><p>นัดคิวผ่าน LINE ได้ทันที</p><span class="b l">นัดผ่าน LINE</span></div>`],
+["Hero + คะแนนรีวิว","รีวิวอยู่ในหัวเว็บ (เทรนด์ 2026)",1,`<span class="star">★★★★★</span> <b>4.9</b> <span class="m">จาก 1,280 รีวิว Google</span><div style="margin-top:6px">${hT}</div><span class="b l" style="margin-top:6px">นัดผ่าน LINE</span>`],
+["Hero + โปรโมชัน","เน้นข้อเสนอและเวลาจำกัด",1,`<span class="tag">โปรเดือนนี้</span><h3 style="margin-top:4px">ขูดหินปูน <span class="pr">฿590</span> <s class="m" style="font-size:11px">฿800</s></h3><p>ถึง 31 ธ.ค. เท่านั้น</p><span class="b a" style="margin-top:6px">รับโปรทาง LINE</span>`],
+["Hero วิดีโอพื้นหลัง","ร้านที่มีคลิปบรรยากาศ",0,`<div class="img" style="height:170px;display:grid;place-items:center;color:#fff"><div class="c"><div style="font-size:26px">▶</div><b>ดูบรรยากาศคลินิก</b></div></div>`],
+["Hero + ฟอร์มสั้น","เก็บชื่อเบอร์ทันที",0,`<div class="g2"><div>${hT}</div><div class="sf col"><div class="ln"></div><div class="ln"></div><span class="b">ขอให้โทรกลับ</span></div></div>`],
+["Hero ภาพมือถือ","ธุรกิจที่มีแอป/ระบบ",0,`<div class="g2" style="align-items:center"><div>${hT}</div><div style="width:70px;height:140px;border:3px solid var(--pt);border-radius:14px;margin:auto" class="img"></div></div>`],
+["Hero แยกครึ่งสี","ดูทันสมัย สีแบรนด์ชัด",0,`<div class="g2" style="margin:-10px;height:190px"><div style="background:var(--p);color:#fff;padding:12px"><h3 style="color:#fff">ฟันสวย ยิ้มมั่นใจ</h3><span class="b a">จองคิว</span></div><div class="img" style="border-radius:0"></div></div>`],
+["Hero + จุดเด่น 3 ข้อ","สรุปเหตุผลให้เลือกทันที",1,hT+`<div class="col" style="margin-top:6px"><span>✓ หมอเฉพาะทาง</span><span>✓ ผ่อน 0% 10 เดือน</span><span>✓ ที่จอดรถฟรี</span></div>`],
+["Hero ตัวอักษรใหญ่มาก","แบรนด์มีคาแรกเตอร์",0,`<div style="font:700 30px/1 var(--hd);color:var(--p)">ยิ้ม<br>ได้เต็มที่</div><p style="margin-top:6px">คลินิกทันตกรรมครบวงจร</p>`],
+["Hero คอลลาจรูป","มีรูปจริงหลายรูป",0,`<div class="g2"><div>${hT}</div><div class="g2"><div class="img" style="height:70px"></div><div class="img" style="height:70px"></div><div class="img" style="height:70px"></div><div class="img" style="height:70px"></div></div></div>`],
+["Hero สไลด์หลายภาพ","หลายบริการ/หลายโปร",0,`<div class="img" style="height:150px"></div><div class="row" style="justify-content:center;margin-top:6px"><span class="dot" style="width:7px;height:7px;background:var(--p)"></span><span class="dot" style="width:7px;height:7px"></span><span class="dot" style="width:7px;height:7px"></span></div>`],
+["Hero + โลโก้ลูกค้า","B2B/บริษัท สร้างความเชื่อถือ",0,hT+`<p style="margin-top:8px">ได้รับความไว้วางใจจาก</p><div class="g4" style="margin-top:4px"><div class="ln" style="height:14px"></div><div class="ln" style="height:14px"></div><div class="ln" style="height:14px"></div><div class="ln" style="height:14px"></div></div>`],
+["Hero ตัวเลขผลงาน","โชว์ประสบการณ์เป็นตัวเลข",1,hT+`<div class="g3 c" style="margin-top:8px"><div><div class="big">10+</div><span class="m">ปี</span></div><div><div class="big">5k</div><span class="m">เคส</span></div><div><div class="big">4.9</div><span class="m">คะแนน</span></div></div>`],
+["Hero รูปวงกลมเจ้าของ","ธุรกิจคนเดียว/ผู้เชี่ยวชาญ",1,`<div class="row"><div class="img" style="width:70px;height:70px;border-radius:50%"></div><div><h3>ทพ.ใจดี ยิ้มสวย</h3><p>ทันตแพทย์เฉพาะทางจัดฟัน</p></div></div><span class="b l" style="margin-top:10px">ปรึกษาฟรีทาง LINE</span>`],
+["Hero พื้นเข้มหรู","แบรนด์พรีเมียม",0,`<div class="dk" style="margin:-10px;height:190px;padding:14px"><span class="tag" style="color:#d4af37;background:#d4af3722">PREMIUM</span><h3 style="color:#fff;margin-top:6px">ความงามระดับพรีเมียม</h3><p>นัดหมายส่วนตัว</p><span class="b a" style="margin-top:8px">จองคิว</span></div>`],
+["Hero + ช่องจองวันเวลา","ธุรกิจนัดคิว",1,hT+`<div class="row sf" style="margin-top:6px"><span>📅 เลือกวัน</span><span class="sp"></span><span>⏰ เวลา</span><span class="b">จอง</span></div>`],
+["Hero แบบการ์ดลอยบนรูป","ข้อความอ่านง่ายบนรูปทุกแบบ",0,`<div class="img" style="height:170px;padding:12px;display:flex;align-items:flex-end"><div style="background:var(--pb);border-radius:8px;padding:8px"><h4>ฟันสวย ยิ้มมั่นใจ</h4><span class="b l">นัดผ่าน LINE</span></div></div>`],
+["Hero ไล่สีแบรนด์","ไม่มีรูปก็ดูดี",0,`<div style="margin:-10px;height:190px;padding:14px;background:linear-gradient(160deg,var(--p),color-mix(in srgb,var(--p) 40%,var(--pa)));color:#fff"><h3 style="color:#fff">ฟันสวย ยิ้มมั่นใจ</h3><p style="color:#fffd">นัดคิวผ่าน LINE ได้ทันที</p><span class="b a" style="margin-top:8px">นัดเลย</span></div>`],
+]);
+
+/* 3. SERVICES / FEATURES */
+const card=(i,x="")=>`<div class="sf ${x}"><div class="row"><div class="ic">${i+1}</div><h4>${svc[i]}</h4></div><p>฿${price[i]}</p></div>`;
+add("SVC","บริการ / จุดเด่น","รายการบริการพร้อมราคา ลูกค้าไทยชอบเห็นราคาชัดตั้งแต่แรก",[
+["การ์ด 2 คอลัมน์","ใช้บ่อยที่สุดบนมือถือ",1,`<h3>บริการของเรา</h3><div class="g2">${[0,1,2,3].map(i=>card(i)).join("")}</div>`],
+["รายการพร้อมราคาขวา","แบบเมนู อ่านเร็ว",1,`<h3>ราคาบริการ</h3>`+[0,1,2,3,4].map(i=>`<div class="row" style="border-bottom:1px solid var(--pl);padding:4px 0"><span>${svc[i]}</span><span class="sp"></span><b class="pr">฿${price[i]}</b></div>`).join("")],
+["Bento grid","เทรนด์ 2026 กล่องขนาดต่างกัน",1,`<div style="display:grid;grid-template-columns:2fr 1fr;grid-template-rows:70px 70px;gap:6px"><div class="img" style="grid-row:span 2;padding:8px;color:#fff"><h4>จัดฟันใส</h4></div><div class="sf"><h4>ขูดหินปูน</h4></div><div class="sf"><h4>ฟอกสีฟัน</h4></div></div><div class="g3" style="margin-top:6px"><div class="sf"><h4>อุดฟัน</h4></div><div class="sf"><h4>รากเทียม</h4></div><div class="sf"><h4>เด็ก</h4></div></div>`],
+["การ์ดมีรูป","บริการที่เห็นผลด้วยภาพ",1,`<div class="g2">${[0,1].map(i=>`<div class="sf"><div class="img" style="height:60px;margin-bottom:4px"></div><h4>${svc[i]}</h4><span class="pr">฿${price[i]}</span></div>`).join("")}</div>`],
+["ไอคอน 3 คอลัมน์","สรุปจุดเด่นสั้นๆ",0,`<div class="g3 c">${["หมอเฉพาะทาง","ผ่อน 0%","จอดรถฟรี"].map((t,i)=>`<div><div class="ic" style="margin:0 auto 4px">${"★%P"[i]}</div><h4>${t}</h4><p>คำอธิบายสั้น</p></div>`).join("")}</div>`],
+["แท็บหมวดบริการ","บริการเยอะ แบ่งหมวด",0,`<div class="row" style="margin-bottom:6px"><span class="tag">ทั่วไป</span><span class="m">ความงาม</span><span class="m">เด็ก</span></div>`+[0,1,2].map(i=>`<div class="row sf" style="margin-bottom:4px"><span>${svc[i]}</span><span class="sp"></span><b class="pr">฿${price[i]}</b></div>`).join("")],
+["พับเปิดรายละเอียด","บริการมีรายละเอียดเยอะ",0,[0,1,2,3].map((i,j)=>`<div class="sf" style="margin-bottom:4px"><div class="row"><b>${svc[i]}</b><span class="sp"></span>${j?"＋":"−"}</div>${j?"":"<p>ใช้เวลา 45 นาที รวมขัดฟัน</p>"}</div>`).join("")],
+["สลับซ้ายขวา","เล่าบริการทีละอย่าง",0,[0,1].map(i=>`<div class="g2" style="align-items:center;margin-bottom:6px">${i?"":`<div class="img" style="height:60px"></div>`}<div><h4>${svc[i]}</h4><p>คำอธิบายบริการ 1–2 บรรทัด</p></div>${i?`<div class="img" style="height:60px"></div>`:""}</div>`).join("")],
+["เลื่อนแนวนอน","ประหยัดพื้นที่บนมือถือ",1,`<h3>บริการ</h3><div class="row" style="overflow:hidden">${[0,1,2].map(i=>`<div class="sf" style="min-width:110px"><div class="img" style="height:55px"></div><h4>${svc[i]}</h4><span class="pr">฿${price[i]}</span></div>`).join("")}</div>`],
+["การ์ดพร้อมปุ่มจอง","กดจองต่อบริการ",1,[0,1,2].map(i=>`<div class="row sf" style="margin-bottom:4px"><div><h4>${svc[i]}</h4><span class="pr">฿${price[i]}</span></div><span class="sp"></span><span class="b l">จอง</span></div>`).join("")],
+["ตารางเปรียบเทียบ","เทียบ 2–3 ตัวเลือก",0,`<table style="width:100%;border-collapse:collapse;font-size:10px">${[["","ธรรมดา","ใส"],["ราคา","35k","45k"],["ระยะ","24 ด.","18 ด."],["มองเห็น","ใช่","แทบไม่"]].map(r=>`<tr>${r.map(c=>`<td style="border-bottom:1px solid var(--pl);padding:4px">${c}</td>`).join("")}</tr>`).join("")}</table>`],
+["ขั้นตอนบริการ","เล่ากระบวนการ 1-2-3",1,["ปรึกษา","ตรวจและวางแผน","ทำการรักษา","ติดตามผล"].map((t,i)=>`<div class="row" style="margin-bottom:6px"><div class="ic">${i+1}</div><b>${t}</b></div>`).join("")],
+["ก่อน / หลัง","บริการความงาม เห็นผลชัด",1,`<div class="g2"><div class="c"><div class="img" style="height:110px;filter:grayscale(1)"></div>ก่อน</div><div class="c"><div class="img" style="height:110px"></div>หลัง</div></div>`],
+["บริการเด่น 1 + รอง","ดันบริการทำเงิน",0,`<div class="img" style="height:80px;padding:8px;color:#fff"><span class="tag" style="background:#fff3;color:#fff">ยอดนิยม</span><h4>จัดฟันใส</h4></div><div class="g3" style="margin-top:6px">${[0,1,2].map(i=>`<div class="sf"><h4>${svc[i]}</h4></div>`).join("")}</div>`],
+["ไอคอนใหญ่กลาง","เรียบง่าย เป็นมิตร",0,`<div class="g2 c">${[0,1,2,3].map(i=>`<div class="sf"><div style="font-size:20px">${"🦷✨😁👶"[i*2]?["🦷","✨","😁","👶"][i]:""}</div><h4>${svc[i]}</h4></div>`).join("")}</div>`],
+["เมนูพร้อมแท็กแนะนำ","บอกตัวขายดี",1,[0,1,2,3].map(i=>`<div class="row" style="padding:4px 0;border-bottom:1px solid var(--pl)"><span>${svc[i]}</span>${i==2?'<span class="tag">แนะนำ</span>':""}<span class="sp"></span><b class="pr">฿${price[i]}</b></div>`).join("")],
+["การ์ดพื้นเข้ม","แบรนด์หรู",0,`<div class="dk" style="margin:-10px;height:190px;padding:10px"><div class="g2">${[0,1,2,3].map(i=>`<div style="border:1px solid #fff2;border-radius:8px;padding:7px"><h4 style="color:#fff">${svc[i]}</h4><span style="color:#d4af37">฿${price[i]}</span></div>`).join("")}</div></div>`],
+["รายการเช็กลิสต์","บอกสิ่งที่ได้รับ",0,`<h3>สิ่งที่คุณได้</h3>`+["ตรวจช่องปากละเอียด","เอกซเรย์ดิจิทัล","แผนการรักษาเป็นลายลักษณ์อักษร","ติดตามผลฟรี 1 ครั้ง"].map(t=>`<div>✓ ${t}</div>`).join("")],
+["การ์ดตัวเลขใหญ่","บริการที่วัดผลได้",0,`<div class="g2">${[["98%","ผู้ป่วยพอใจ"],["45 นาที","ต่อการรักษา"],["10 ปี","ประสบการณ์"],["0%","ผ่อนนาน 10 เดือน"]].map(([a,b])=>`<div class="sf"><div class="big">${a}</div><p>${b}</p></div>`).join("")}</div>`],
+["แพ็กบริการคู่","ขายบริการเป็นชุด",0,`<div class="sf" style="border-color:var(--p)"><span class="tag">ชุดคุ้ม</span><h4 style="margin-top:4px">ขูดหินปูน + ฟอกสีฟัน</h4><span class="pr">฿6,900</span> <s class="m">฿7,300</s></div><div class="sf" style="margin-top:6px"><h4>ตรวจ + อุด 2 ซี่</h4><span class="pr">฿2,500</span></div>`],
+]);
+
+/* 4. PRODUCTS */
+const prd=["แปรงขนนุ่ม","ไหมขัดฟัน","ยาสีฟัน","น้ำยาบ้วนปาก"],pp=["120","90","150","220"];
+const pc=(i,x="")=>`<div class="sf ${x}"><div class="img" style="height:58px;margin-bottom:4px"></div><h4>${prd[i]}</h4><span class="pr">฿${pp[i]}</span></div>`;
+add("PRD","สินค้า","สำหรับร้านค้าและแบรนด์ แสดงสินค้าพร้อมราคา สั่งผ่าน LINE",[
+["กริด 2 คอลัมน์","แบบแอปช้อปปิ้งไทย",1,`<div class="g2">${[0,1,2,3].map(i=>pc(i)).join("")}</div>`],
+["กริด 3 คอลัมน์","สินค้าเยอะ",0,`<div class="g3">${[0,1,2,3,0,1].map(i=>pc(i)).join("")}</div>`],
+["รายการแนวนอน","ข้อมูลเยอะ อ่านง่าย",0,[0,1,2].map(i=>`<div class="row sf" style="margin-bottom:4px"><div class="img" style="width:44px;height:44px"></div><div><h4>${prd[i]}</h4><span class="pr">฿${pp[i]}</span></div></div>`).join("")],
+["การ์ด + ปุ่มสั่ง LINE","ปิดการขายในแชท",1,`<div class="g2">${[0,1].map(i=>`<div class="sf"><div class="img" style="height:70px"></div><h4>${prd[i]}</h4><span class="pr">฿${pp[i]}</span><div><span class="b l" style="margin-top:4px">สั่งทาง LINE</span></div></div>`).join("")}</div>`],
+["ป้ายลดราคา","เน้นโปรโมชัน",1,`<div class="g2">${[0,1,2,3].map(i=>`<div class="sf" style="position:relative"><span class="tag" style="position:absolute;top:4px;left:4px;background:#dc2626;color:#fff">-20%</span><div class="img" style="height:58px"></div><h4>${prd[i]}</h4><span class="pr">฿${pp[i]}</span> <s class="m">฿${+pp[i]+30}</s></div>`).join("")}</div>`],
+["สินค้าเด่นใหญ่","ขายสินค้าตัวเดียว/ตัวหลัก",1,`<div class="g2" style="align-items:center"><div class="img" style="height:150px"></div><div><span class="tag">ขายดี</span><h3 style="margin-top:4px">${prd[2]}</h3><p>สูตรฟลูออไรด์ 1450ppm</p><div class="big" style="margin:6px 0">฿150</div><span class="b l">สั่งเลย</span></div></div>`],
+["เลื่อนแนวนอน","สินค้าแนะนำในพื้นที่น้อย",1,`<h3>สินค้าแนะนำ</h3><div class="row" style="overflow:hidden">${[0,1,2,3].map(i=>`<div style="min-width:90px">${pc(i)}</div>`).join("")}</div>`],
+["หมวดหมู่ด้านบน","สินค้าหลายประเภท",0,`<div class="row" style="margin-bottom:6px"><span class="tag">ทั้งหมด</span><span class="m">ดูแลฟัน</span><span class="m">เด็ก</span></div><div class="g2">${[0,1].map(i=>pc(i)).join("")}</div>`],
+["ป้ายสินค้าหมด","บอกสต็อกตรงไปตรงมา",0,`<div class="g2">${[0,1,2,3].map(i=>`<div class="sf" style="${i==2?"opacity:.55":""}"><div class="img" style="height:58px"></div><h4>${prd[i]}</h4>${i==2?'<span class="tag">สินค้าหมด</span>':`<span class="pr">฿${pp[i]}</span>`}</div>`).join("")}</div>`],
+["Lookbook ภาพใหญ่","แฟชั่น/ไลฟ์สไตล์",0,`<div class="img" style="height:120px"></div><div class="g3" style="margin-top:6px"><div class="img" style="height:50px"></div><div class="img" style="height:50px"></div><div class="img" style="height:50px"></div></div>`],
+["ตัวเลือกสี/ขนาด","สินค้ามีหลายแบบ",0,`<div class="g2"><div class="img" style="height:140px"></div><div><h4>${prd[0]}</h4><span class="pr">฿120</span><p style="margin-top:6px">สี</p><div class="row"><span class="dot" style="width:14px;height:14px;background:#2563eb"></span><span class="dot" style="width:14px;height:14px;background:#ec4899"></span><span class="dot" style="width:14px;height:14px;background:#16a34a"></span></div><p style="margin-top:6px">ขนาด</p><div class="row"><span class="tag">S</span><span class="tag">M</span></div></div></div>`],
+["ชุดเซ็ตสินค้า","ขายเป็นแพ็ก",0,`<div class="sf" style="border-color:var(--p)"><div class="row"><div class="img" style="width:40px;height:40px"></div><div class="img" style="width:40px;height:40px"></div><div class="img" style="width:40px;height:40px"></div></div><h4 style="margin-top:4px">เซ็ตดูแลฟันครบ</h4><span class="pr">฿450</span> <s class="m">฿580</s></div>`],
+["รีวิวติดสินค้า","เพิ่มความมั่นใจซื้อ",1,`<div class="g2">${[0,1].map(i=>`<div class="sf"><div class="img" style="height:58px"></div><h4>${prd[i]}</h4><span class="star">★★★★★</span> <span class="m">(${120+i*30})</span><div class="pr">฿${pp[i]}</div></div>`).join("")}</div>`],
+["มินิมอลไม่มีกรอบ","แบรนด์เรียบหรู",0,`<div class="g2">${[0,1,2,3].map(i=>`<div><div class="img" style="height:62px;border-radius:2px"></div><div style="font-size:10px;margin-top:3px">${prd[i]}</div><b>฿${pp[i]}</b></div>`).join("")}</div>`],
+["พื้นเข้มสินค้าหรู","เครื่องประดับ/ของพรีเมียม",0,`<div class="dk" style="margin:-10px;height:190px;padding:10px"><div class="g2">${[0,1].map(i=>`<div><div class="img" style="height:110px"></div><div style="color:#fff">${prd[i]}</div><b style="color:#d4af37">฿${pp[i]}</b></div>`).join("")}</div></div>`],
+["Flash sale นับถอยหลัง","สร้างความเร่งด่วน",1,`<div class="row" style="background:#dc2626;color:#fff;border-radius:6px;padding:5px 8px"><b>FLASH SALE</b><span class="sp"></span><b>02:14:36</b></div><div class="g3" style="margin-top:6px">${[0,1,2].map(i=>pc(i)).join("")}</div>`],
+["สินค้าพร้อมจำนวนขาย","หลักฐานว่าขายดี",0,`<div class="g2">${[0,1].map(i=>`<div class="sf"><div class="img" style="height:62px"></div><h4>${prd[i]}</h4><span class="pr">฿${pp[i]}</span><p>ขายแล้ว ${1.2+i}k ชิ้น</p></div>`).join("")}</div>`],
+["ตารางราคาส่ง","ขายส่ง/ขายจำนวนมาก",0,`<h4>${prd[0]} ราคาส่ง</h4><table style="width:100%;font-size:10px;border-collapse:collapse">${[["1–9 ชิ้น","฿120"],["10–49","฿99"],["50+","฿85"]].map(r=>`<tr><td style="border-bottom:1px solid var(--pl);padding:4px">${r[0]}</td><td class="pr" style="text-align:right">${r[1]}</td></tr>`).join("")}</table>`],
+["สินค้าใหม่ป้าย NEW","แบรนด์ออกของใหม่บ่อย",0,`<div class="g2">${[0,1,2,3].map(i=>`<div class="sf">${i<2?'<span class="tag">NEW</span>':""}<div class="img" style="height:50px;margin-top:2px"></div><h4>${prd[i]}</h4></div>`).join("")}</div>`],
+["แคตตาล็อก PDF / LINE","ส่งแคตตาล็อกในแชท",0,`<div class="sf row"><div class="img" style="width:50px;height:66px"></div><div><h4>แคตตาล็อกสินค้า 2026</h4><p>120 รายการ อัปเดตทุกเดือน</p><span class="b l" style="margin-top:4px">ขอแคตตาล็อกทาง LINE</span></div></div>`],
+]);
+
+/* 5. PRICING */
+const plan=(n,p,hot)=>`<div class="sf c" style="${hot?"border:2px solid var(--p)":""}">${hot?'<span class="tag">แนะนำ</span>':""}<h4>${n}</h4><div class="big">฿${p}</div><p>/เดือน</p></div>`;
+add("PRC","แพ็กเกจราคา","2–3 แพ็กเกจและไฮไลต์แพ็กแนะนำ เป็นรูปแบบที่ใช้สม่ำเสมอที่สุด",[
+["3 แพ็ก ไฮไลต์กลาง","มาตรฐานสากล",1,`<div class="g3" style="align-items:center">${plan("เริ่มต้น","990")}${plan("มืออาชีพ","2,490",1)}${plan("องค์กร","4,990")}</div>`],
+["2 แพ็กเทียบกัน","ตัดสินใจง่าย",1,`<div class="g2">${plan("พื้นฐาน","990")}${plan("พรีเมียม","1,990",1)}</div>`],
+["สลับรายเดือน/ปี","มีราคารายปีลด",0,`<div class="row" style="justify-content:center;margin-bottom:6px"><span class="tag">รายเดือน</span><span class="m">รายปี -20%</span></div><div class="g3">${plan("S","990")}${plan("M","2,490",1)}${plan("L","4,990")}</div>`],
+["แพ็กเดียวพร้อมรายการ","ขายราคาเดียว",1,`<div class="sf"><h4>แพ็กเกจครบ</h4><div class="big">฿1,490</div><div class="col" style="margin-top:6px"><span>✓ เว็บไซต์ 1 หน้า</span><span>✓ โดเมนของคุณ</span><span>✓ แก้ฟรี 2 รอบ</span></div><span class="b" style="margin-top:6px">เริ่มเลย</span></div>`],
+["ตารางฟีเจอร์เต็ม","B2B เปรียบละเอียด",0,`<table style="width:100%;font-size:10px;border-collapse:collapse">${[["","S","M","L"],["ผู้ใช้","1","5","∞"],["รายงาน","—","✓","✓"],["ซัพพอร์ต","อีเมล","แชท","โทร"]].map(r=>`<tr>${r.map(c=>`<td style="padding:4px;border-bottom:1px solid var(--pl)">${c}</td>`).join("")}</tr>`).join("")}</table>`],
+["ราคาเริ่มต้น…","บริการที่ราคาไม่ตายตัว",1,`<div class="sf"><p>จัดฟันใส</p><div class="row"><span class="m">เริ่มต้น</span><span class="big">฿45,000</span></div><p>ประเมินราคาจริงฟรีหลังตรวจ</p><span class="b l" style="margin-top:6px">ขอใบเสนอราคา</span></div>`],
+["ผ่อนชำระรายเดือน","สินค้า/บริการราคาสูง",1,`<div class="sf c"><h4>รากฟันเทียม</h4><div class="big">฿3,500<small style="font-size:11px">/เดือน</small></div><p>ผ่อน 0% นาน 10 เดือน ผ่านบัตรเครดิต</p></div>`],
+["แพ็กแนวตั้งบนมือถือ","อ่านทีละแพ็ก",0,["เริ่มต้น ฿990","มืออาชีพ ฿2,490","องค์กร ฿4,990"].map((t,i)=>`<div class="row sf" style="margin-bottom:4px;${i==1?"border:2px solid var(--p)":""}"><b>${t}</b><span class="sp"></span><span class="b ${i==1?"":"o"}">เลือก</span></div>`).join("")],
+["ราคาพื้นเข้ม","หรูหรา",0,`<div class="dk" style="margin:-10px;height:190px;padding:12px"><div class="g2">${["Silver ฿2,900","Gold ฿5,900"].map((t,i)=>`<div style="border:1px solid ${i?"#d4af37":"#fff3"};border-radius:8px;padding:8px;color:#fff"><b>${t}</b><p>รายละเอียดแพ็ก</p></div>`).join("")}</div></div>`],
+["คิดค่าบริการเอง (slider)","ราคาตามจำนวน",0,`<h4>คำนวณราคา</h4><p>จำนวนพนักงาน: 25 คน</p><div style="height:6px;background:var(--pl);border-radius:3px;margin:8px 0;position:relative"><div style="width:45%;height:6px;background:var(--p);border-radius:3px"></div></div><div class="big">฿4,500<small style="font-size:11px">/เดือน</small></div>`],
+["ราคาแพ็ก + ส่วนลดเปิดตัว","เร่งให้ตัดสินใจ",1,`<div class="sf c" style="border:2px dashed var(--pa)"><span class="tag" style="background:var(--pa);color:#1b1300">เปิดตัว ลด 30%</span><div class="row" style="justify-content:center;margin-top:6px"><s class="m">฿2,990</s><span class="big">฿1,990</span></div><p>ถึง 31 ธ.ค. เท่านั้น</p></div>`],
+["การ์ดราคามีไอคอน","เป็นมิตร อ่านง่าย",0,`<div class="g3">${["🌱","🚀","🏢"].map((e,i)=>`<div class="sf c"><div style="font-size:18px">${e}</div><h4>${["เริ่ม","โต","ใหญ่"][i]}</h4><b class="pr">฿${["990","2,490","4,990"][i]}</b></div>`).join("")}</div>`],
+["ราคาต่อครั้ง/ต่อชั่วโมง","บริการรายครั้ง",0,[["เหมาครึ่งวัน","฿2,500"],["เหมาเต็มวัน","฿4,500"],["รายชั่วโมง","฿700"]].map(([a,b])=>`<div class="row" style="padding:5px 0;border-bottom:1px solid var(--pl)"><span>${a}</span><span class="sp"></span><b class="pr">${b}</b></div>`).join("")],
+["แพ็ก + รับประกัน","ลดความเสี่ยงผู้ซื้อ",1,`<div class="g2">${plan("พื้นฐาน","990")}${plan("พรีเมียม","1,990",1)}</div><p class="c" style="margin-top:6px">🛡 ไม่พอใจคืนเงินภายใน 30 วัน</p>`],
+["ราคาแบบเมนูร้านอาหาร","ร้านเล็กเรียบง่าย",0,`<h3 class="c">ราคา</h3>`+[["ตัดผมชาย","฿200"],["สระไดร์","฿250"],["ทำสีผม","฿1,200"]].map(([a,b])=>`<div class="row" style="border-bottom:1px dotted var(--pm);padding:4px 0"><span>${a}</span><span class="sp"></span><b>${b}</b></div>`).join("")],
+["คำถามใต้ราคา","ตอบข้อกังวลทันที",0,`<div class="g2">${plan("S","990")}${plan("M","2,490",1)}</div><div class="sf" style="margin-top:6px"><b>มีค่าใช้จ่ายแอบแฝงไหม?</b><p>ไม่มี ราคานี้รวมทุกอย่าง</p></div>`],
+["แพ็กแนวนอนเลื่อน","แพ็กเยอะ",0,`<div class="row" style="overflow:hidden">${["S","M","L","XL"].map((s,i)=>`<div style="min-width:90px">${plan(s,["990","2,490","4,990","9,900"][i],i==1)}</div>`).join("")}</div>`],
+["ราคาสมาชิกรายปี","ฟิตเนส/คอร์ส",0,`<div class="sf" style="border:2px solid var(--p)"><span class="tag">คุ้มสุด</span><h4 style="margin-top:4px">สมาชิกรายปี</h4><div class="big">฿9,900</div><p>เฉลี่ย ฿825/เดือน ประหยัด ฿2,000</p></div>`],
+["ขอใบเสนอราคา","งาน B2B/ราชการ",1,`<div class="sf c"><h4>ราคาตามขอบเขตงาน</h4><p>แจ้งรายละเอียด ทีมงานส่งใบเสนอราคาภายใน 24 ชม.</p><span class="b" style="margin-top:6px">ขอใบเสนอราคา</span></div>`],
+["ราคา + QR พร้อมเพย์","จ่ายทันทีบนหน้าเว็บ",0,`<div class="g2" style="align-items:center"><div><h4>มัดจำจองคิว</h4><div class="big">฿500</div><p>สแกนจ่าย แล้วส่งสลิปทาง LINE</p></div><div style="width:90px;height:90px;margin:auto;background:repeating-conic-gradient(var(--pt) 0 25%,var(--pb) 0 50%) 0 0/12px 12px;border:6px solid var(--pb);outline:1px solid var(--pl)"></div></div>`],
+]);
+
+/* 6. REVIEWS */
+const rv=(n,t)=>`<div class="sf"><span class="star">★★★★★</span><p style="color:var(--pt)">“${t}”</p><b style="font-size:10px">— ${n}</b></div>`;
+add("REV","รีวิว","หลักฐานจากลูกค้าจริง แนวโน้ม 2026 คือกระจายรีวิวทั่วหน้าและใช้รีวิวจาก Google",[
+["การ์ดรีวิว 2 คอลัมน์","อ่านง่าย ใช้บ่อย",1,`<div class="g2">${rv("คุณมิน","หมอใจดี ไม่เจ็บเลย")}${rv("คุณบอล","สะอาด จองง่ายผ่านไลน์")}</div>`],
+["คะแนน Google ใหญ่","ใช้คะแนนที่คนไทยเชื่อ",1,`<div class="c"><div class="big" style="font-size:30px">4.9</div><span class="star">★★★★★</span><p>1,280 รีวิวบน Google</p><span class="b o" style="margin-top:6px">อ่านรีวิวทั้งหมด</span></div>`],
+["คำพูดเด่นใหญ่","รีวิวเดียวที่ทรงพลัง",0,`<div style="font:600 15px/1.4 var(--hd);color:var(--pt)">“จัดฟันที่นี่ 18 เดือน ยิ้มได้เต็มที่ทุกรูป”</div><div class="row" style="margin-top:8px"><div class="dot"></div><b>คุณแพร · พนักงานออฟฟิศ</b></div>`],
+["สไลด์รีวิว","รีวิวเยอะ พื้นที่น้อย",0,rv("คุณมิน","หมอใจดี ไม่เจ็บเลย อธิบายละเอียดทุกขั้นตอน")+`<div class="row" style="justify-content:center;margin-top:6px">‹ <span class="dot" style="width:7px;height:7px;background:var(--p)"></span><span class="dot" style="width:7px;height:7px"></span> ›</div>`],
+["ภาพแคปแชท LINE","คนไทยเชื่อแคปแชทจริง",1,`<div class="g2"><div class="sf" style="background:#e9f7ee"><div style="background:#fff;border-radius:8px;padding:5px;margin-bottom:4px;color:#111">ขอบคุณมากค่ะ ฟันสวยมาก 🥰</div><div style="background:#06c755;color:#fff;border-radius:8px;padding:5px;margin-left:20px">ยินดีค่ะ</div></div><div class="sf" style="background:#e9f7ee"><div style="background:#fff;border-radius:8px;padding:5px;color:#111">ไม่เจ็บเลยค่ะ จะบอกเพื่อนต่อ</div></div></div>`],
+["รีวิววิดีโอ","น่าเชื่อถือสูงสุด",0,`<div class="g2">${[0,1].map(()=>`<div class="img" style="height:120px;display:grid;place-items:center;color:#fff;font-size:22px">▶</div>`).join("")}</div>`],
+["Masonry หลายรีวิว","ดูว่ามีรีวิวเยอะ",0,`<div style="columns:2;gap:6px">${["หมอเก่ง","จองง่าย ตรงเวลา ไม่ต้องรอนาน","ราคาไม่แพง","ประทับใจการบริการมากค่ะ แนะนำเลย","สะอาด"].map((t,i)=>`<div class="sf" style="break-inside:avoid;margin-bottom:6px"><span class="star">★★★★★</span><p style="color:var(--pt)">${t}</p></div>`).join("")}</div>`],
+["รีวิว + รูปลูกค้า","เห็นหน้าคนจริง",1,[["คุณมิน","หมอใจดี ไม่เจ็บเลย"],["คุณบอล","จองง่ายผ่านไลน์"]].map(([n,t])=>`<div class="row sf" style="margin-bottom:5px"><div class="img" style="width:34px;height:34px;border-radius:50%"></div><div><b>${n}</b> <span class="star">★★★★★</span><p>${t}</p></div></div>`).join("")],
+["แถบคะแนนจากหลายแหล่ง","Google + Facebook + Wongnai",1,`<div class="g3 c">${[["Google","4.9"],["Facebook","4.8"],["Wongnai","4.7"]].map(([a,b])=>`<div class="sf"><b>${a}</b><div class="big">${b}</div><span class="star">★★★★★</span></div>`).join("")}</div>`],
+["กราฟสัดส่วนดาว","แสดงความโปร่งใส",0,`<div class="row"><div class="big" style="font-size:26px">4.8</div><div style="flex:1">${[92,6,1,1,0].map((w,i)=>`<div class="row" style="gap:4px"><span style="width:10px">${5-i}</span><div style="flex:1;height:5px;background:var(--pl);border-radius:3px"><div style="width:${w}%;height:5px;background:var(--pa);border-radius:3px"></div></div></div>`).join("")}</div></div>`],
+["รีวิวก่อน/หลัง","บริการความงาม",0,`<div class="g2"><div class="img" style="height:80px;filter:grayscale(1)"></div><div class="img" style="height:80px"></div></div>`+rv("คุณแพร","ฟันขาวขึ้น 6 ระดับ")],
+["รีวิวพื้นเข้ม","แบรนด์หรู",0,`<div class="dk" style="margin:-10px;height:190px;padding:14px"><span style="color:#d4af37">★★★★★</span><div style="font:600 14px/1.4 var(--hd);color:#fff;margin-top:6px">“บริการระดับโรงแรม ใส่ใจทุกรายละเอียด”</div><p style="margin-top:6px">— คุณนภา</p></div>`],
+["โลโก้ลูกค้าองค์กร","B2B",0,`<p class="c">ลูกค้าที่ไว้วางใจเรา</p><div class="g3" style="margin-top:6px">${Array(6).fill(`<div class="ln" style="height:22px"></div>`).join("")}</div>`],
+["รีวิวแบบโพสต์โซเชียล","คุ้นตาคนไทย",0,`<div class="sf"><div class="row"><div class="dot"></div><div><b>Ploy Ch.</b><p>2 วันที่แล้ว</p></div></div><p style="color:var(--pt);margin-top:4px">มาทำฟันที่นี่ประทับใจมาก หมอใจดีสุดๆ</p><div class="img" style="height:60px;margin-top:4px"></div><p>👍 128 · 💬 12</p></div>`],
+["ตัวเลขความพอใจ","สรุปเป็นตัวเลข",0,`<div class="g2 c"><div class="sf"><div class="big">98%</div><p>กลับมาใช้บริการซ้ำ</p></div><div class="sf"><div class="big">5,000+</div><p>ลูกค้าที่ไว้ใจ</p></div></div>`],
+["รีวิวแถบเลื่อนอัตโนมัติ","มีชีวิตชีวา",0,`<div class="row" style="overflow:hidden">${["หมอเก่ง ★5","สะอาด ★5","จองง่าย ★5","ราคาดี ★5"].map(t=>`<span class="sf" style="white-space:nowrap">${t}</span>`).join("")}</div><div class="row" style="overflow:hidden;margin-top:6px;margin-left:-30px">${["ไม่เจ็บ ★5","ตรงเวลา ★5","ใจดี ★5","แนะนำ ★5"].map(t=>`<span class="sf" style="white-space:nowrap">${t}</span>`).join("")}</div>`],
+["คำถาม-ตอบจากลูกค้า","รีวิวพร้อมข้อกังวล",0,`<div class="sf"><b>“กลัวเจ็บมาก ตอนแรกไม่กล้ามา”</b><p style="margin-top:4px">หมอฉีดยาชาให้ก่อน ไม่รู้สึกอะไรเลย — คุณแนน</p></div>`],
+["รีวิวพร้อมบริการที่ใช้","บอกว่ารีวิวเรื่องอะไร",1,[["จัดฟันใส","ยิ้มสวยขึ้นมาก"],["ขูดหินปูน","เร็ว ไม่เจ็บ"]].map(([s,t])=>`<div class="sf" style="margin-bottom:5px"><span class="tag">${s}</span> <span class="star">★★★★★</span><p style="color:var(--pt)">${t}</p></div>`).join("")],
+["ป้ายรางวัล/การรับรอง","รางวัลและมาตรฐาน",0,`<div class="g3 c">${["🏆 รางวัล 2025","✓ มาตรฐาน สธ.","★ Top Google"].map(t=>`<div class="sf"><b>${t}</b></div>`).join("")}</div>`],
+["รีวิวเดียวกับรูปใหญ่","เรื่องเล่าลูกค้า",0,`<div class="g2" style="align-items:center"><div class="img" style="height:150px"></div><div><span class="star">★★★★★</span><p style="color:var(--pt);margin-top:4px">“จากคนไม่กล้ายิ้ม ตอนนี้ถ่ายรูปได้ทุกมุม”</p><b>— คุณแพร</b></div></div>`],
+]);
+
+/* 7. GALLERY / PORTFOLIO */
+const im=(h)=>`<div class="img" style="height:${h}px"></div>`;
+add("GAL","แกลเลอรี / ผลงาน","รูปบรรยากาศ ร้าน ผลงาน ใช้รูปจริงแทนรูปสต็อก",[
+["กริด 2×2","พื้นฐาน",1,`<div class="g2">${im(80)+im(80)+im(80)+im(80)}</div>`],
+["กริด 3 คอลัมน์","รูปเยอะ",0,`<div class="g3">${Array(6).fill(im(55)).join("")}</div>`],
+["รูปใหญ่ 1 + เล็ก 4","รูปเด่นหนึ่งรูป",1,`<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:5px"><div class="img" style="grid-row:span 2;height:160px"></div>${im(77)+im(77)+im(77)+im(77)}</div>`],
+["แถบเลื่อน","ประหยัดพื้นที่",1,`<div class="row" style="overflow:hidden">${Array(4).fill(`<div class="img" style="min-width:120px;height:150px"></div>`).join("")}</div>`],
+["Masonry","รูปหลายสัดส่วน",0,`<div style="columns:3;gap:5px">${[60,90,50,80,70,60].map(h=>`<div class="img" style="height:${h}px;margin-bottom:5px"></div>`).join("")}</div>`],
+["ผลงานพร้อมคำบรรยาย","ช่าง/รับเหมา/ออกแบบ",1,`<div class="g2">${["บ้านเดี่ยว บางนา","คอนโด อารีย์"].map(t=>`<div>${im(90)}<b>${t}</b><p>เสร็จใน 14 วัน</p></div>`).join("")}</div>`],
+["ก่อน/หลังเลื่อน","เห็นผลชัด",1,`<div style="position:relative;height:160px"><div class="img" style="position:absolute;inset:0;filter:grayscale(1)"></div><div class="img" style="position:absolute;inset:0 0 0 50%;border-radius:0 6px 6px 0"></div><div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#fff"></div><span class="tag" style="position:absolute;left:6px;top:6px;background:#0008;color:#fff">ก่อน</span><span class="tag" style="position:absolute;right:6px;top:6px;background:#0008;color:#fff">หลัง</span></div>`],
+["แท็บหมวดผลงาน","ผลงานหลายประเภท",0,`<div class="row" style="margin-bottom:6px"><span class="tag">ทั้งหมด</span><span class="m">บ้าน</span><span class="m">ร้าน</span><span class="m">ออฟฟิศ</span></div><div class="g3">${Array(6).fill(im(50)).join("")}</div>`],
+["รูปกลมเรียงแถว","บรรยากาศ/ทีม แบบสตอรี่",0,`<div class="row">${Array(5).fill(`<div class="img" style="width:46px;height:46px;border-radius:50%;outline:2px solid var(--p);outline-offset:2px"></div>`).join("")}</div><p style="margin-top:6px">ไฮไลต์จาก IG</p>`],
+["ฟีด Instagram","ร้านที่โพสต์ IG ประจำ",1,`<div class="row"><b>@smileclinic</b><span class="sp"></span><span class="b o">ติดตาม</span></div><div class="g3" style="margin-top:6px">${Array(6).fill(im(50)).join("")}</div>`],
+["รูปเต็มกว้าง + ข้อความ","เล่าเรื่องสถานที่",0,`<div class="img" style="height:150px;padding:10px;display:flex;align-items:flex-end;color:#fff"><div><h4 style="color:#fff">ห้องตรวจปลอดเชื้อ</h4><p style="color:#fffc">มาตรฐานโรงพยาบาล</p></div></div>`],
+["กรอบโพลารอยด์","อบอุ่น เป็นกันเอง",0,`<div class="row" style="justify-content:center;gap:10px;padding-top:10px">${[-6,3,-2].map(r=>`<div style="background:#fff;padding:5px 5px 16px;box-shadow:0 2px 8px #0002;transform:rotate(${r}deg)"><div class="img" style="width:70px;height:70px;border-radius:0"></div></div>`).join("")}</div>`],
+["วิดีโอ + รูป","มีคลิปผลงาน",0,`<div class="g2"><div class="img" style="height:150px;display:grid;place-items:center;color:#fff;font-size:24px">▶</div><div class="col">${im(72)+im(72)}</div></div>`],
+["ผลงานพร้อมตัวเลข","ผลงานวัดผลได้ (B2B)",0,`<div class="sf">${im(70)}<b>ร้านกาแฟ ABC</b><div class="g3 c" style="margin-top:4px"><div><b class="pr">+45%</b><p>ยอดขาย</p></div><div><b class="pr">2.1k</b><p>ผู้ติดตาม</p></div><div><b class="pr">30 วัน</b><p>ระยะเวลา</p></div></div></div>`],
+["กริดไร้ช่องว่าง","ดูเป็นงานศิลป์",0,`<div class="g3" style="gap:0">${Array(9).fill(`<div class="img" style="height:56px;border-radius:0"></div>`).join("")}</div>`],
+["รูปทีมงาน","ธุรกิจบริการ คนคือจุดขาย",1,`<div class="g3 c">${["ทพ.ใจดี","ทพญ.ยิ้ม","คุณนุ่น"].map(t=>`<div><div class="img" style="height:70px;border-radius:50%;width:70px;margin:auto"></div><b>${t}</b><p>ทันตแพทย์</p></div>`).join("")}</div>`],
+["Lightbox ขยายรูป","กดดูรูปใหญ่",0,`<div style="background:#000c;margin:-10px;height:190px;display:grid;place-items:center;position:relative"><div class="img" style="width:70%;height:130px"></div><span style="position:absolute;top:8px;right:12px;color:#fff">✕</span><span style="position:absolute;left:8px;color:#fff">‹</span><span style="position:absolute;right:8px;color:#fff">›</span></div>`],
+["รูปพื้นเข้ม","งานถ่ายภาพ/หรู",0,`<div class="dk" style="margin:-10px;height:190px;padding:10px"><div class="g2">${im(80)+im(80)+im(80)+im(80)}</div></div>`],
+["Bento แกลเลอรี","เทรนด์ 2026",0,`<div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,50px);gap:5px"><div class="img" style="grid-column:span 2;grid-row:span 2"></div><div class="img"></div><div class="img"></div><div class="img"></div><div class="img" style="grid-column:span 2"></div></div>`],
+["ไทม์ไลน์ผลงาน","โชว์ความต่อเนื่อง",0,["2026 · คลินิกสาขา 2","2024 · ได้รางวัล","2020 · เปิดคลินิก"].map(t=>`<div class="row" style="margin-bottom:6px"><span class="dot" style="width:10px;height:10px;background:var(--p)"></span><div class="img" style="width:50px;height:36px"></div><b>${t}</b></div>`).join("")],
+]);
+
+/* 8. STATS / TRUST */
+add("TRU","ความน่าเชื่อถือ / ตัวเลข","ตัวเลขผลงาน ใบอนุญาต การรับรอง ช่วยลดความกังวลว่า \"โอนแล้วเงียบ\"",[
+["ตัวเลข 3 ช่อง","สรุปผลงานเร็ว",1,`<div class="g3 c">${[["10+","ปี"],["5,000+","เคส"],["4.9","คะแนน"]].map(([a,b])=>`<div><div class="big">${a}</div><p>${b}</p></div>`).join("")}</div>`],
+["ตัวเลข 4 ช่องการ์ด","ข้อมูลมากขึ้น",0,`<div class="g2">${[["10+","ปีประสบการณ์"],["5k","ลูกค้า"],["98%","พอใจ"],["3","สาขา"]].map(([a,b])=>`<div class="sf c"><div class="big">${a}</div><p>${b}</p></div>`).join("")}</div>`],
+["ใบอนุญาต/เลขทะเบียน","ธุรกิจที่ต้องมีใบอนุญาต",1,`<div class="sf row"><div class="ic">✓</div><div><b>ใบอนุญาตสถานพยาบาล</b><p>ได้รับอนุญาตจากกระทรวงสาธารณสุข</p></div></div><div class="sf row" style="margin-top:5px"><div class="ic">✓</div><div><b>จดทะเบียนบริษัท</b><p>บริษัทจดทะเบียนในไทย</p></div></div>`],
+["ป้ายการรับประกัน","ลดความเสี่ยงซื้อ",1,`<div class="g3 c">${["🛡 รับประกัน 1 ปี","↺ คืนเงิน 30 วัน","🔒 จ่ายปลอดภัย"].map(t=>`<div class="sf"><b>${t}</b></div>`).join("")}</div>`],
+["แถบโลโก้พาร์ตเนอร์","ธนาคาร/ประกัน/แบรนด์",0,`<p class="c">พาร์ตเนอร์ของเรา</p><div class="g4" style="margin-top:6px">${Array(8).fill(`<div class="ln" style="height:18px"></div>`).join("")}</div>`],
+["ทำไมต้องเลือกเรา","เหตุผล 4 ข้อ",1,`<h3>ทำไมต้องเลือกเรา</h3><div class="g2">${["หมอเฉพาะทาง","เครื่องมือทันสมัย","ราคาชัดเจน","จองง่ายใน LINE"].map(t=>`<div class="row"><div class="ic">✓</div><b>${t}</b></div>`).join("")}</div>`],
+["ไม่มีมัดจำ ดูก่อนจ่าย","ตอบความกลัวคนไทยตรงๆ",1,`<div class="sf c" style="border:2px solid var(--line-g)"><div style="font-size:20px">🤝</div><h4>ไม่ต้องจ่ายก่อน</h4><p>เห็นงานจริงก่อน ถูกใจค่อยจ่าย</p></div>`],
+["ตัวเลขพื้นสีแบรนด์","แถบเด่นกลางหน้า",0,`<div style="background:var(--p);color:#fff;margin:0 -10px;padding:14px"><div class="g3 c">${[["10+","ปี"],["5k","เคส"],["4.9","★"]].map(([a,b])=>`<div><div style="font:700 20px var(--hd)">${a}</div><div style="opacity:.85">${b}</div></div>`).join("")}</div></div>`],
+["ข่าว/สื่อที่ลงถึง","เคยออกสื่อ",0,`<p class="c">เคยได้รับการนำเสนอโดย</p><div class="g3" style="margin-top:6px">${["ไทยรัฐ","Wongnai","The Standard"].map(t=>`<div class="sf c"><b class="m">${t}</b></div>`).join("")}</div>`],
+["ใบรับรองเป็นรูป","มีเอกสารให้ดู",0,`<div class="g3">${Array(3).fill(`<div class="sf" style="height:90px;display:grid;place-items:center"><div style="width:40px;height:52px;border:2px solid var(--pa);border-radius:3px"></div></div>`).join("")}</div>`],
+["ทีมผู้เชี่ยวชาญ","ธุรกิจที่ขายความรู้",1,[["ทพ.ใจดี","จัดฟัน 15 ปี"],["ทพญ.ยิ้ม","รากเทียม 10 ปี"]].map(([a,b])=>`<div class="row sf" style="margin-bottom:5px"><div class="img" style="width:38px;height:38px;border-radius:50%"></div><div><b>${a}</b><p>${b}</p></div></div>`).join("")],
+["ช่องทางชำระเงิน","บอกว่าจ่ายทางไหนได้",1,`<p>ชำระได้ทุกช่องทาง</p><div class="g4" style="margin-top:6px">${["พร้อมเพย์","บัตร","โอน","ผ่อน 0%"].map(t=>`<div class="sf c" style="font-size:9.5px"><b>${t}</b></div>`).join("")}</div>`],
+["Counter นับขึ้น","ตัวเลขเคลื่อนไหว",0,`<div class="c" style="padding-top:20px"><div class="big" style="font-size:34px">12,480</div><p>คนยิ้มสวยกับเราแล้ว</p></div>`],
+["Timeline ประวัติ","ธุรกิจเก่าแก่",0,["2016 เปิดคลินิกแรก","2020 ขยายสาขา 2","2024 รางวัลคลินิกยอดนิยม"].map(t=>`<div class="row" style="border-left:2px solid var(--p);padding-left:8px;margin-bottom:6px"><b>${t}</b></div>`).join("")],
+["ความปลอดภัยข้อมูล PDPA","เก็บข้อมูลลูกค้า",0,`<div class="sf row"><div class="ic">🔒</div><div><b>ข้อมูลของคุณปลอดภัย</b><p>เก็บเท่าที่จำเป็นตาม PDPA ลบได้เมื่อขอ</p></div></div>`],
+["Before/After ตัวเลข","ผลลัพธ์ที่วัดได้",0,`<div class="g2 c"><div class="sf"><p>ก่อน</p><div class="big" style="color:var(--pm)">120</div><p>ลูกค้า/เดือน</p></div><div class="sf" style="border-color:var(--p)"><p>หลัง</p><div class="big">310</div><p>ลูกค้า/เดือน</p></div></div>`],
+["ประกาศเวลาตอบแชท","คนไทยอยากได้คำตอบเร็ว",1,`<div class="sf row" style="border-color:var(--line-g)"><span style="color:var(--line-g);font-size:16px">●</span><div><b>ตอบแชทภายใน 15 นาที</b><p>ทุกวัน 9:00–21:00</p></div></div>`],
+["แผนที่สาขา","หลายสาขา",0,`<div class="img" style="height:90px;position:relative">${[[20,30],[55,50],[75,25]].map(([x,y])=>`<span style="position:absolute;left:${x}%;top:${y}%;color:#dc2626;font-size:16px">📍</span>`).join("")}</div><p style="margin-top:4px">3 สาขา: สยาม · อารีย์ · บางนา</p>`],
+["ข้อความผู้ก่อตั้ง","เล่าความตั้งใจ",0,`<div class="row"><div class="img" style="width:60px;height:60px;border-radius:50%"></div><div><p style="color:var(--pt)">“อยากให้ทุกคนกล้ายิ้ม จึงเปิดคลินิกที่ราคาชัดและไม่เจ็บ”</p><b>— ทพ.ใจดี ผู้ก่อตั้ง</b></div></div>`],
+["แถบเครื่องหมายมาตรฐาน","ISO/อย./ฮาลาล",0,`<div class="row" style="justify-content:center;gap:12px;padding-top:30px">${["ISO","อย.","ฮาลาล","GMP"].map(t=>`<div style="width:44px;height:44px;border-radius:50%;border:2px solid var(--p);display:grid;place-items:center;font-weight:700;color:var(--p);font-size:10px">${t}</div>`).join("")}</div>`],
+]);
+
+/* 9. PROCESS */
+add("STP","ขั้นตอนการใช้บริการ","บอกว่าต้องทำอะไรบ้าง ลดความกังวลสำหรับคนไม่ถนัดเทคโนโลยี",[
+["ตัวเลข 1-2-3 แนวนอน","เข้าใจง่ายที่สุด",1,`<div class="g3 c">${["ทัก LINE","เลือกวันเวลา","มาตามนัด"].map((t,i)=>`<div><div class="ic" style="margin:0 auto 4px;border-radius:50%">${i+1}</div><b>${t}</b></div>`).join("")}</div>`],
+["แนวตั้งมีเส้นเชื่อม","อ่านบนมือถือ",1,["ทัก LINE","ส่งรายละเอียด","รับใบเสนอราคา","นัดวันทำงาน"].map((t,i)=>`<div class="row" style="margin-bottom:4px"><div class="ic" style="border-radius:50%">${i+1}</div><b>${t}</b></div>${i<3?'<div style="width:2px;height:8px;background:var(--pl);margin-left:9px"></div>':""}`).join("")],
+["การ์ดขั้นตอน + ไอคอน","มีภาพประกอบ",0,`<div class="g2">${["💬 ทักแชท","📋 ส่งข้อมูล","👀 ดูตัวอย่าง","✅ จ่ายเมื่อพอใจ"].map(t=>`<div class="sf"><b>${t}</b></div>`).join("")}</div>`],
+["Timeline ระยะเวลา","บอกว่าใช้เวลาเท่าไร",1,[["วันที่ 1","ปรึกษาและวางแผน"],["วันที่ 3","เริ่มงาน"],["วันที่ 14","ส่งมอบ"]].map(([a,b])=>`<div class="row" style="margin-bottom:6px"><span class="tag">${a}</span><b>${b}</b></div>`).join("")],
+["ขั้นตอนเป็นแชท LINE","จำลองว่าคุยแล้วเป็นยังไง",1,`<div style="background:#e9f7ee;margin:-10px;height:190px;padding:10px">${["สวัสดีค่ะ อยากนัดขูดหินปูน","ได้เลยค่ะ สะดวกวันไหนคะ","เสาร์นี้ 10 โมงค่ะ"].map((t,i)=>`<div style="background:${i%2?"#06c755":"#fff"};color:${i%2?"#fff":"#111"};border-radius:10px;padding:5px 8px;margin:4px ${i%2?"0 4px 30px":"30px 4px 0"}">${t}</div>`).join("")}</div>`],
+["สองทางเลือก","ทำเอง vs ให้ทีมทำ",0,`<div class="g2">${["ทำเองผ่านเว็บ","ให้ทีมโทรหา"].map((t,i)=>`<div class="sf c" style="${i?"border-color:var(--p)":""}"><b>${t}</b><p>${i?"สะดวกสำหรับผู้สูงอายุ":"เลือกวันเวลาเอง"}</p></div>`).join("")}</div>`],
+["ขั้นตอนพื้นสีแบรนด์","เด่นกลางหน้า",0,`<div style="background:var(--p);color:#fff;margin:-10px;height:190px;padding:12px"><h3 style="color:#fff">ง่ายแค่ 3 ขั้นตอน</h3>${["ทัก LINE","เลือกเวลา","มาตามนัด"].map((t,i)=>`<div style="margin-top:6px"><b>${i+1}.</b> ${t}</div>`).join("")}</div>`],
+["Accordion ขั้นตอน","รายละเอียดเยอะ",0,["1. ปรึกษา","2. ตรวจ","3. รักษา","4. ติดตาม"].map((t,i)=>`<div class="sf" style="margin-bottom:4px"><div class="row"><b>${t}</b><span class="sp"></span>${i?"＋":"−"}</div>${i?"":"<p>พูดคุยปัญหาและเป้าหมาย 15 นาที ฟรี</p>"}</div>`).join("")],
+["ลูกศรเชื่อมขั้นตอน","flow ชัด",0,`<div class="row" style="justify-content:center;padding-top:40px">${["ทัก","จอง","มา"].map((t,i)=>`<div class="sf c"><b>${t}</b></div>${i<2?'<span class="pr">→</span>':""}`).join("")}</div>`],
+["ขั้นตอน + ราคาแต่ละขั้น","งานรับเหมา/โปรเจกต์",0,[["สำรวจหน้างาน","ฟรี"],["ออกแบบ","฿5,000"],["ก่อสร้าง","ตามใบเสนอ"]].map(([a,b],i)=>`<div class="row sf" style="margin-bottom:4px"><div class="ic">${i+1}</div><b>${a}</b><span class="sp"></span><span class="pr">${b}</span></div>`).join("")],
+["ขั้นตอนพร้อมรูป","แสดงหน้างานจริง",0,`<div class="g3">${["ปรึกษา","ตรวจ","รักษา"].map((t,i)=>`<div><div class="img" style="height:70px"></div><b>${i+1}. ${t}</b></div>`).join("")}</div>`],
+["Progress bar","บอกว่าอยู่ขั้นไหน",0,`<div class="row" style="gap:3px">${[1,1,0,0].map(f=>`<div style="flex:1;height:6px;border-radius:3px;background:${f?"var(--p)":"var(--pl)"}"></div>`).join("")}</div><div class="row" style="margin-top:4px;font-size:9.5px"><span>ทัก</span><span class="sp"></span><span>ส่งข้อมูล</span><span class="sp"></span><span class="m">ตัวอย่าง</span><span class="sp"></span><span class="m">ออนไลน์</span></div>`],
+["ขั้นตอนตัวเลขใหญ่","มินิมอล",0,["ทัก LINE","ส่งข้อมูล","ดูตัวอย่าง"].map((t,i)=>`<div class="row"><span style="font:700 24px var(--hd);color:color-mix(in srgb,var(--p) 40%,transparent);width:30px">${i+1}</span><b>${t}</b></div>`).join("")],
+["ขั้นตอนสำหรับผู้สูงอายุ","ตัวใหญ่ ปุ่มใหญ่",0,`<div style="font-size:14px"><b>1. กดปุ่มเขียวด้านล่าง</b><br><b>2. พิมพ์ "นัด"</b><br><b>3. รอเราโทรกลับ</b></div><span class="b l" style="font-size:13px;padding:8px 16px;margin-top:8px">กดตรงนี้</span>`],
+["วงกลมรอบ","บริการต่อเนื่อง/สมาชิก",0,`<div style="width:130px;height:130px;border:3px dashed var(--p);border-radius:50%;margin:10px auto;position:relative">${[["ตรวจ",50,-8],["ขูด",100,50],["ติดตาม",50,105],["นัดซ้ำ",-12,50]].map(([t,x,y])=>`<span class="tag" style="position:absolute;left:${x}%;top:${y}%;transform:translate(-50%,0);background:var(--pb);border:1px solid var(--p)">${t}</span>`).join("")}</div>`],
+["Checklist สิ่งที่ต้องเตรียม","ก่อนมาใช้บริการ",1,`<h4>สิ่งที่ต้องเตรียม</h4>${["บัตรประชาชน","ประวัติการแพ้ยา","มาก่อนเวลา 10 นาที"].map(t=>`<div>☐ ${t}</div>`).join("")}`],
+["ขั้นตอนแบบแท็บ","ลูกค้าหลายกลุ่ม",0,`<div class="row" style="margin-bottom:6px"><span class="tag">ลูกค้าใหม่</span><span class="m">ลูกค้าเก่า</span></div>${["ทัก LINE","กรอกประวัติ","นัดตรวจ"].map((t,i)=>`<div><b>${i+1}.</b> ${t}</div>`).join("")}`],
+["ขั้นตอน + CTA ท้าย","ปิดด้วยปุ่ม",1,`<div class="g3 c">${["ทัก","จอง","มา"].map((t,i)=>`<div><div class="ic" style="margin:auto;border-radius:50%">${i+1}</div><b>${t}</b></div>`).join("")}</div><div class="c" style="margin-top:10px"><span class="b l">เริ่มขั้นตอนที่ 1</span></div>`],
+["ขั้นตอนบนพื้นเข้ม","หรู",0,`<div class="dk" style="margin:-10px;height:190px;padding:12px">${["Consultation","Design","Delivery"].map((t,i)=>`<div class="row" style="border-bottom:1px solid #fff2;padding:6px 0"><span style="color:#d4af37">0${i+1}</span><b style="color:#fff">${t}</b></div>`).join("")}</div>`],
+["คำถามนำทาง (quiz)","ช่วยเลือกบริการ",0,`<div class="sf"><b>ปัญหาของคุณคืออะไร?</b><div class="col" style="margin-top:6px">${["ฟันเหลือง","ฟันเก","ปวดฟัน"].map(t=>`<span class="b o" style="width:100%">${t}</span>`).join("")}</div></div>`],
+]);
+
+/* 10. FAQ */
+const q=["มีที่จอดรถไหม","ผ่อนได้ไหม","ใช้ประกันสังคมได้ไหม","ต้องจองล่วงหน้าไหม"];
+add("FAQ","คำถามที่พบบ่อย","ตอบคำถามซ้ำๆ ลดเวลาตอบแชท และช่วยให้ Google แสดงผลดีขึ้น",[
+["พับเปิด (Accordion)","มาตรฐาน",1,q.map((t,i)=>`<div class="sf" style="margin-bottom:4px"><div class="row"><b>${t}</b><span class="sp"></span>${i?"＋":"−"}</div>${i?"":"<p>มีที่จอดฟรี 10 คัน</p>"}</div>`).join("")],
+["สองคอลัมน์เปิดหมด","คำถามน้อย อ่านทีเดียว",0,`<div class="g2">${q.map(t=>`<div><b>${t}</b><p>คำตอบสั้นๆ 1 บรรทัด</p></div>`).join("")}</div>`],
+["แท็บหมวดคำถาม","คำถามเยอะ",0,`<div class="row" style="margin-bottom:6px"><span class="tag">ราคา</span><span class="m">การจอง</span><span class="m">การรักษา</span></div>`+q.slice(0,3).map(t=>`<div class="sf" style="margin-bottom:4px"><b>${t}</b></div>`).join("")],
+["FAQ + ปุ่มถามใน LINE","ไม่เจอคำตอบก็ทักได้",1,q.slice(0,3).map(t=>`<div class="sf" style="margin-bottom:4px"><b>${t}</b></div>`).join("")+`<div class="c"><span class="b l">ถามเพิ่มทาง LINE</span></div>`],
+["แบบแชท ถาม-ตอบ","เป็นกันเอง",0,`<div style="background:#e9f7ee;margin:-10px;height:190px;padding:10px">${[["ผ่อนได้ไหมคะ",0],["ได้ค่ะ 0% 10 เดือน",1],["มีที่จอดไหม",0],["มีฟรี 10 คันค่ะ",1]].map(([t,r])=>`<div style="background:${r?"#06c755":"#fff"};color:${r?"#fff":"#111"};border-radius:10px;padding:4px 8px;margin:4px ${r?"0 4px 40px":"40px 4px 0"}">${t}</div>`).join("")}</div>`],
+["FAQ ช่องค้นหา","คำถามเยอะมาก",0,`<div class="sf" style="margin-bottom:6px"><span class="m">⌕ ค้นหาคำถาม</span></div>`+q.slice(0,3).map(t=>`<div style="border-bottom:1px solid var(--pl);padding:4px 0"><b>${t}</b></div>`).join("")],
+["FAQ + รูปด้านข้าง","ไม่เป็นข้อความล้วน",0,`<div class="g2"><div class="img" style="height:160px"></div><div>${q.slice(0,3).map(t=>`<div style="border-bottom:1px solid var(--pl);padding:5px 0"><b>${t}</b></div>`).join("")}</div></div>`],
+["คำถามเป็นการ์ดไอคอน","น่าอ่านขึ้น",0,`<div class="g2">${q.map((t,i)=>`<div class="sf"><div class="ic">?</div><b>${t}</b></div>`).join("")}</div>`],
+["เส้นคั่นมินิมอล","แบรนด์เรียบ",0,q.map((t,i)=>`<div class="row" style="border-bottom:1px solid var(--pl);padding:6px 0"><span>${t}</span><span class="sp"></span><span class="m">${i?"+":"−"}</span></div>`).join("")],
+["คำถามเลขข้อ","อ้างอิงง่าย",0,q.map((t,i)=>`<div style="margin-bottom:5px"><b class="pr">Q${i+1}.</b> <b>${t}</b><p>A: คำตอบสั้น</p></div>`).join("")],
+["FAQ พื้นเข้ม","หรู",0,`<div class="dk" style="margin:-10px;height:190px;padding:12px">${q.map(t=>`<div style="border-bottom:1px solid #fff2;padding:5px 0;color:#fff">${t} <span style="float:right;color:#d4af37">+</span></div>`).join("")}</div>`],
+["FAQ ราคาโดยเฉพาะ","ตอบเรื่องเงินตรงๆ",1,[["ราคานี้รวมอะไรบ้าง","รวมค่าหมอ ค่ายา ค่าเอกซเรย์"],["มีค่าใช้จ่ายเพิ่มไหม","ไม่มี ยกเว้นเลือกเพิ่มเอง"]].map(([a,b])=>`<div class="sf" style="margin-bottom:5px"><b>${a}</b><p>${b}</p></div>`).join("")],
+["FAQ + ติดต่อคน","ปิดด้วยเจ้าหน้าที่",0,q.slice(0,2).map(t=>`<div class="sf" style="margin-bottom:4px"><b>${t}</b></div>`).join("")+`<div class="row sf"><div class="img" style="width:32px;height:32px;border-radius:50%"></div><div><b>ยังมีคำถาม?</b><p>คุณนุ่นยินดีตอบค่ะ</p></div><span class="sp"></span><span class="b l">ทัก</span></div>`],
+["คำถามยอดนิยม 3 อันดับ","เน้นเฉพาะที่ถามบ่อย",0,`<h4>3 คำถามที่ถามบ่อยที่สุด</h4>`+q.slice(0,3).map((t,i)=>`<div class="row" style="margin-top:5px"><span class="big" style="font-size:16px">${i+1}</span><b>${t}</b></div>`).join("")],
+["FAQ ภาษาไทย/อังกฤษ","ลูกค้าต่างชาติ",0,`<div class="row" style="margin-bottom:6px"><span class="tag">TH</span><span class="m">EN</span></div>`+q.slice(0,3).map(t=>`<div class="sf" style="margin-bottom:4px"><b>${t}</b></div>`).join("")],
+["FAQ ขั้นตอนการจอง","คำถามเรื่องนัด",0,[["ยกเลิกนัดได้ไหม","แจ้งล่วงหน้า 24 ชม."],["มาสายได้กี่นาที","ไม่เกิน 15 นาที"]].map(([a,b])=>`<div class="sf" style="margin-bottom:5px"><b>${a}</b><p>${b}</p></div>`).join("")],
+["FAQ ตัวหนาคำถามใหญ่","อ่านง่ายผู้สูงอายุ",0,q.slice(0,2).map(t=>`<div style="margin-bottom:8px"><b style="font-size:13px">${t}</b><p style="font-size:12px">คำตอบตัวใหญ่ อ่านง่าย</p></div>`).join("")],
+["FAQ + วิดีโอตอบ","คำถามที่อธิบายยาก",0,`<div class="g2"><div class="img" style="height:90px;display:grid;place-items:center;color:#fff">▶</div><div><b>จัดฟันใสใส่ยังไง?</b><p>ดูคลิป 1 นาที</p></div></div>`+q.slice(0,1).map(t=>`<div class="sf" style="margin-top:6px"><b>${t}</b></div>`).join("")],
+["FAQ ชิปคำถาม","กดเลือกหัวข้อ",0,`<div class="row" style="flex-wrap:wrap">${q.concat(["ราคา","เวลาเปิด"]).map(t=>`<span class="tag">${t}</span>`).join("")}</div><div class="sf" style="margin-top:8px"><b>มีที่จอดรถไหม</b><p>มีที่จอดฟรี 10 คัน</p></div>`],
+["FAQ ข้อกังวลผู้ซื้อ","ตอบความกลัวคนไทย",1,[["โอนแล้วจะเงียบไหม","ไม่มีมัดจำ ดูงานก่อนจ่าย"],["ถ้าไม่ชอบทำยังไง","แก้ได้ฟรี 2 รอบ"]].map(([a,b])=>`<div class="sf" style="margin-bottom:5px"><b>${a}</b><p>${b}</p></div>`).join("")],
+]);
+
+/* 11. CTA / CONTACT */
+add("CTA","ติดต่อ / ปุ่มชวนทัก","ส่วนปิดการขาย ปุ่ม LINE ต้องเห็นตลอด กดแล้วเปิดแชททันที",[
+["ปุ่ม LINE ลอยมุมล่าง","เห็นตลอด กดง่าย",1,`<div class="col">${L(80)+L(60)+L(90)}</div><div class="line-fab">💬 แชท LINE</div>`],
+["แถบ CTA สีแบรนด์","ปิดท้ายหน้า",1,`<div style="background:var(--p);color:#fff;margin:-10px;height:190px;padding:16px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center"><h3 style="color:#fff">พร้อมยิ้มสวยหรือยัง?</h3><span class="b l" style="margin-top:8px">ทัก LINE เลย</span></div>`],
+["QR LINE + ปุ่ม","คนเปิดบนคอมสแกนได้",1,`<div class="g2" style="align-items:center"><div><h4>แอด LINE</h4><p>@smileclinic</p><span class="b l" style="margin-top:6px">เพิ่มเพื่อน</span></div><div style="width:90px;height:90px;margin:auto;background:repeating-conic-gradient(var(--pt) 0 25%,var(--pb) 0 50%) 0 0/10px 10px;border:6px solid var(--pb);outline:1px solid var(--pl)"></div></div>`],
+["การ์ดติดต่อครบ","โทร LINE แผนที่ เวลา",1,`<div class="g2">${[["☎","โทรหาเรา"],["💬","@smileclinic"],["📍","สยาม กรุงเทพฯ"],["⏰","9:00–19:00"]].map(([a,b])=>`<div class="sf"><b>${a}</b> ${b}</div>`).join("")}</div>`],
+["แผนที่ + ที่อยู่","ร้านที่มีหน้าร้าน",1,`<div class="img" style="height:110px;position:relative"><span style="position:absolute;left:45%;top:35%;font-size:20px">📍</span></div><b>ถนนพระราม 1 ย่านสยาม</b><p>ใกล้ BTS สยาม ทางออก 4</p>`],
+["ฟอร์มขอให้โทรกลับ","คนไม่อยากทักก่อน",0,`<div class="sf col"><b>ให้เราโทรกลับ</b><div class="sf" style="background:var(--pb)"><span class="m">ชื่อ</span></div><div class="sf" style="background:var(--pb)"><span class="m">เบอร์โทร</span></div><span class="b">ส่ง</span></div>`],
+["แถบล่างติดจอ 2 ปุ่ม","โทร + LINE ตลอดเวลา",1,`<div class="col">${L(80)+L(60)}</div><div style="position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr"><span style="background:var(--p);color:#fff;padding:9px;text-align:center;font-weight:700">☎ โทร</span><span style="background:var(--line-g);color:#fff;padding:9px;text-align:center;font-weight:700">💬 LINE</span></div>`],
+["CTA + ข้อเสนอ","ให้เหตุผลทักตอนนี้",1,`<div class="sf c" style="border:2px solid var(--pa)"><span class="tag" style="background:var(--pa);color:#1b1300">ทักวันนี้</span><h4 style="margin-top:4px">รับส่วนลด 10% ครั้งแรก</h4><span class="b l" style="margin-top:6px">ทัก LINE รับโค้ด</span></div>`],
+["หลายช่องทางโซเชียล","LINE FB IG TikTok",0,`<div class="g4 c">${[["LINE","#06c755"],["FB","#1877f2"],["IG","#e1306c"],["TikTok","#111"]].map(([a,c])=>`<div style="background:${c};color:#fff;border-radius:8px;padding:8px 2px;font-weight:700;font-size:9.5px">${a}</div>`).join("")}</div>`],
+["CTA รูปพื้นหลัง","อารมณ์ก่อนกด",0,`<div class="img" style="height:170px;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#fff;text-align:center"><h3 style="color:#fff">เริ่มยิ้มได้วันนี้</h3><span class="b l" style="margin-top:6px">นัดผ่าน LINE</span></div>`],
+["จองคิวปฏิทิน","เลือกวันบนเว็บ",0,`<div class="g4 c" style="grid-template-columns:repeat(7,1fr)">${Array.from({length:14},(_,i)=>`<div class="sf" style="padding:4px;${i==9?"background:var(--p);color:#fff":""}">${i+1}</div>`).join("")}</div><div class="row" style="margin-top:6px">${["10:00","13:00","15:30"].map(t=>`<span class="tag">${t}</span>`).join("")}</div>`],
+["CTA สองทางเลือก","ซื้อเลย / ถามก่อน",0,`<div class="c" style="padding-top:30px"><h3>สนใจบริการ?</h3><div class="row" style="justify-content:center;margin-top:8px"><span class="b">จองเลย</span><span class="b o">ถามก่อน</span></div></div>`],
+["CTA + รูปพนักงาน","มีคนจริงรอตอบ",1,`<div class="row sf"><div class="img" style="width:46px;height:46px;border-radius:50%"></div><div><b>คุณนุ่น แอดมิน</b><p>ตอบแชทภายใน 15 นาที</p></div></div><span class="b l" style="margin-top:8px;width:100%;text-align:center">💬 คุยกับคุณนุ่น</span>`],
+["ปุ่ม LINE ใหญ่เต็มกว้าง","ผู้สูงอายุ/มือถือ",1,`<div style="padding-top:50px"><span class="b l" style="display:block;text-align:center;font-size:14px;padding:12px">💬 แชท LINE กับเรา</span><p class="c" style="margin-top:6px">ตอบทุกวัน 9:00–21:00</p></div>`],
+["Popup ชวนทัก","ข้อเสนอเด้งขึ้น",0,`<div style="background:#0006;margin:-10px;height:190px;display:grid;place-items:center"><div style="background:var(--pb);border-radius:10px;padding:12px;width:75%;text-align:center"><b>รับคูปอง 100 บาท</b><p>เมื่อแอด LINE วันนี้</p><span class="b l" style="margin-top:6px">รับคูปอง</span></div></div>`],
+["CTA พื้นเข้มหรู","จองส่วนตัว",0,`<div class="dk" style="margin:-10px;height:190px;padding:16px;display:flex;flex-direction:column;justify-content:center"><h3 style="color:#fff">นัดหมายส่วนตัว</h3><p>พื้นที่จำกัดต่อวัน</p><span class="b a" style="margin-top:8px;width:max-content">จองคิว</span></div>`],
+["ติดต่อ + เวลาเปิดวันนี้","บอกสถานะทันที",0,`<div class="sf"><div class="row"><b>วันนี้</b><span class="tag" style="color:#16a34a;background:#16a34a22">เปิดอยู่</span></div>${[["จ–ศ","9:00–19:00"],["ส","9:00–17:00"],["อา","ปิด"]].map(([a,b])=>`<div class="row"><span>${a}</span><span class="sp"></span><span>${b}</span></div>`).join("")}</div>`],
+["CTA นับถอยหลัง","เร่งตัดสินใจ",0,`<div class="c" style="padding-top:20px"><b>โปรหมดใน</b><div class="row" style="justify-content:center;margin:6px 0">${["02","14","36"].map(t=>`<div class="sf"><b class="big">${t}</b></div>`).join(":")}</div><span class="b a">รับโปร</span></div>`],
+["ฟอร์มสอบถามละเอียด","งาน B2B / ใบเสนอราคา",0,`<div class="sf col"><div class="g2"><div class="sf" style="background:var(--pb)"><span class="m">ชื่อ</span></div><div class="sf" style="background:var(--pb)"><span class="m">บริษัท</span></div></div><div class="sf" style="background:var(--pb);height:40px"><span class="m">รายละเอียดงาน</span></div><span class="b">ขอใบเสนอราคา</span></div>`],
+["CTA ซ้ำทุกส่วน (inline)","ปุ่มเล็กท้ายทุกหัวข้อ",0,`<div class="col">${L(80)+L(70)}</div><a class="pr" style="display:block;margin:6px 0">สนใจบริการนี้ ทัก LINE →</a><div class="col">${L(90)+L(60)}</div><a class="pr" style="display:block;margin-top:6px">ถามราคา ทัก LINE →</a>`],
+]);
+
+/* 12. FOOTER */
+add("FTR","ส่วนท้าย","ข้อมูลติดต่อ นโยบาย PDPA และลิงก์โซเชียล",[
+["เรียบ 1 บรรทัด","เว็บหน้าเดียว",1,`<div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid var(--pl);padding:10px" class="row"><span class="m">© 2026 ${B}</span><span class="sp"></span><span class="m">นโยบายความเป็นส่วนตัว</span></div>`],
+["3 คอลัมน์ข้อมูล","ธุรกิจทั่วไป",1,`<div class="g3">${[["ติดต่อ","โทรหาเรา"],["เวลาเปิด","9:00–19:00"],["ที่อยู่","สยาม กรุงเทพฯ"]].map(([a,b])=>`<div><b>${a}</b><p>${b}</p></div>`).join("")}</div>`],
+["พื้นเข้มเต็ม","ดูเป็นมืออาชีพ",1,`<div class="dk" style="margin:-10px;height:190px;padding:14px"><b style="color:#fff">${B}</b><p>ดูแลรอยยิ้มทั้งครอบครัว</p><div class="g2" style="margin-top:10px"><p>☎ โทรหาเรา</p><p>💬 @smileclinic</p><p>📍 สยาม</p><p>⏰ 9:00–19:00</p></div></div>`],
+["ไอคอนโซเชียลกลาง","เน้นช่องทางออนไลน์",0,`<div class="c" style="padding-top:40px"><b>${B}</b><div class="row" style="justify-content:center;margin-top:8px">${["#06c755","#1877f2","#e1306c","#111"].map(c=>`<span class="dot" style="background:${c}"></span>`).join("")}</div><p style="margin-top:8px">© 2026</p></div>`],
+["Footer + แผนที่","หน้าร้านจริง",0,`<div class="g2"><div class="img" style="height:110px"></div><div><b>${B}</b><p>ถนนพระราม 1 ย่านสยาม</p><p>☎ โทรหาเรา</p></div></div>`],
+["Footer + สมัครข่าว","เก็บรายชื่อ",0,`<b>รับโปรก่อนใคร</b><div class="row" style="margin-top:6px"><div class="sf" style="flex:1"><span class="m">เบอร์หรือ LINE</span></div><span class="b">สมัคร</span></div><p style="margin-top:10px">© 2026 ${B}</p>`],
+["Footer + ข้อมูลบริษัท","ใบกำกับภาษี/B2B",0,`<b>บริษัท ยิ้มสวย จำกัด</b><p>ออกใบกำกับภาษีได้</p><p>ถนนพระราม 1 ย่านสยาม</p><p style="margin-top:6px">© 2026 · PDPA · เงื่อนไข</p>`],
+["Footer หลายสาขา","มีหลายที่",0,`<div class="g3">${["สยาม","อารีย์","บางนา"].map(s=>`<div><b>สาขา${s}</b><p>☎ โทรหาเรา</p><p>9–19 น.</p></div>`).join("")}</div>`],
+["Footer สีแบรนด์","ธุรกิจสีสด",0,`<div style="background:var(--p);color:#fff;margin:-10px;height:190px;padding:14px"><b>${B}</b><div style="opacity:.85;margin-top:6px">☎ โทรหาเรา · 💬 @smileclinic</div><div style="opacity:.7;margin-top:20px">© 2026 · นโยบายความเป็นส่วนตัว</div></div>`],
+["Footer + ปุ่ม LINE ใหญ่","ชวนทักครั้งสุดท้าย",1,`<div class="c" style="padding-top:20px"><b>ยังมีคำถาม?</b><div><span class="b l" style="margin-top:6px">💬 ทัก LINE</span></div><p style="margin-top:14px">© 2026 ${B}</p></div>`],
+["Footer + ช่องทางชำระ","ร้านค้าออนไลน์",0,`<p>ชำระเงิน</p><div class="row" style="margin-top:4px">${["พร้อมเพย์","VISA","Master","โอน"].map(t=>`<span class="tag">${t}</span>`).join("")}</div><p style="margin-top:10px">© 2026 ${B}</p>`],
+["Footer ลิงก์เมนูหลายหมวด","เว็บหลายหน้า",0,`<div class="g3">${[["บริการ","ขูดหินปูน","จัดฟัน"],["เกี่ยวกับ","ทีมหมอ","รีวิว"],["ช่วยเหลือ","FAQ","ติดต่อ"]].map(c=>`<div><b>${c[0]}</b>${c.slice(1).map(x=>`<p>${x}</p>`).join("")}</div>`).join("")}</div>`],
+["Footer มินิมอลโลโก้","แบรนด์หรู",0,`<div class="c" style="padding-top:50px"><b style="font:600 16px var(--hd);letter-spacing:.08em">SMILE</b><p style="margin-top:6px;letter-spacing:.05em">BANGKOK · SINCE 2016</p></div>`],
+["Footer + ใบอนุญาต","คลินิก/สถาบัน",0,`<div class="row"><div class="ic">✓</div><p>ใบอนุญาตสถานพยาบาลได้รับอนุญาตจากกระทรวงสาธารณสุข</p></div><p style="margin-top:8px">© 2026 ${B} · PDPA</p>`],
+["Footer + เวลาเปิดตาราง","ร้านเวลาเปิดต่างกันแต่ละวัน",0,[["จ–ศ","9:00–19:00"],["ส","9:00–17:00"],["อา","ปิด"]].map(([a,b])=>`<div class="row"><span>${a}</span><span class="sp"></span><span>${b}</span></div>`).join("")+`<p style="margin-top:6px">© 2026 ${B}</p>`],
+["Footer ทำเว็บโดย","เครดิตแบรนด์เรา",1,`<div style="position:absolute;left:0;right:0;bottom:0;padding:10px;border-top:1px solid var(--pl)" class="c"><p>© 2026 ${B}</p><p style="font-size:9.5px">ทำเว็บโดย One Day Easy</p></div>`],
+["Footer สองภาษา","ลูกค้าต่างชาติ",0,`<b>${B} · Smile Dental Clinic</b><p>☎ โทรหาเรา · English speaking staff</p><div class="row" style="margin-top:6px"><span class="tag">TH</span><span class="m">EN</span></div>`],
+["Footer + QR LINE","สแกนเพิ่มเพื่อน",0,`<div class="row"><div style="width:60px;height:60px;background:repeating-conic-gradient(var(--pt) 0 25%,var(--pb) 0 50%) 0 0/8px 8px;border:4px solid var(--pb);outline:1px solid var(--pl)"></div><div><b>@smileclinic</b><p>สแกนเพิ่มเพื่อน</p></div></div><p style="margin-top:8px">© 2026 ${B}</p>`],
+["Footer การ์ดลอย","ทันสมัย",0,`<div class="sf" style="margin-top:30px;border-radius:14px"><div class="row"><b>${B}</b><span class="sp"></span><span class="b l">LINE</span></div><p style="margin-top:4px">© 2026 · PDPA</p></div>`],
+["Footer + กลับขึ้นบน","หน้ายาว",0,`<div class="c" style="padding-top:40px"><span class="sf" style="border-radius:50%;padding:6px 10px">↑</span><p style="margin-top:8px">กลับขึ้นด้านบน</p><p>© 2026 ${B}</p></div>`],
+]);
+
+/* ---------- render ---------- */
+const KEY="ode-picks";
+let picks=new Set();
+try{picks=new Set(JSON.parse(localStorage.getItem(KEY)||"[]"))}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify([...picks]))}catch(e){}};
+const main=document.getElementById("main"),tabs=document.getElementById("tabs");
+const idOf=(k,i)=>`${k}-${String(i+1).padStart(2,"0")}`;
+G.forEach(g=>{
+  const t=document.createElement("button");t.className="tab";t.type="button";t.dataset.k=g.k;
+  t.innerHTML=`${g.name}<span class="n" data-n="${g.k}"></span>`;
+  t.onclick=()=>document.getElementById("g-"+g.k).scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+  tabs.appendChild(t);
+  const s=document.createElement("section");s.className="grp";s.id="g-"+g.k;
+  s.innerHTML=`<h2>${g.name} <span class="count">(${g.items.length} แบบ)</span></h2><p class="why">${g.why}</p><div class="grid"></div>`;
+  const grid=s.querySelector(".grid");
+  g.items.forEach(([nm,nt,hot,html],i)=>{
+    const id=idOf(g.k,i),c=document.createElement("div");c.className="card"+(picks.has(id)?" on":"");
+    c.innerHTML=`<div class="pv" aria-hidden="true">${html}${g.k==="HDR"?`<div class="col" style="margin-top:14px;opacity:.6"><div class="img" style="height:60px"></div>${L(80)}${L(55)}</div>`:""}</div><label for="c-${id}"><input type="checkbox" id="c-${id}" ${picks.has(id)?"checked":""}><span><span class="id">${id}</span> <span class="nm">${nm}</span>${hot?'<span class="hot">นิยม</span>':""}<span class="nt">${nt}</span>${BAD[id]?`<span class="bad">⚠ ขัดกฎ Taste Skill: ${BAD[id]}</span>`:""}</span></label>`;
+    c.querySelector("input").onchange=e=>{e.target.checked?picks.add(id):picks.delete(id);c.classList.toggle("on",e.target.checked);save();upd()};
+    grid.appendChild(c);
+  });
+  main.appendChild(s);
+});
+const out=document.getElementById("out");
+function upd(){
+  document.getElementById("count").textContent=`เลือก ${picks.size} ชิ้น`;
+  G.forEach(g=>{const n=[...picks].filter(p=>p.startsWith(g.k+"-")).length;document.querySelector(`[data-n="${g.k}"]`).textContent=n?`· ${n}`:""});
+  out.value=G.map(g=>{const a=[...picks].filter(p=>p.startsWith(g.k+"-")).sort();return a.length?`${g.name}: ${a.join(", ")}`:""}).filter(Boolean).join("\n");
+}
+upd();
+document.getElementById("copy").onclick=async()=>{
+  out.classList.add("show");
+  if(!out.value){out.value="ยังไม่ได้เลือกชิ้นไหน";return}
+  try{await navigator.clipboard.writeText(out.value);document.getElementById("copy").textContent="คัดลอกแล้ว"}catch(e){out.select()}
+  setTimeout(()=>document.getElementById("copy").textContent="คัดลอกรายการที่เลือก",1800);
+};
+document.getElementById("clear").onclick=()=>{picks.clear();save();document.querySelectorAll(".card").forEach(c=>{c.classList.remove("on");c.querySelector("input").checked=false});upd()};
+</script>
