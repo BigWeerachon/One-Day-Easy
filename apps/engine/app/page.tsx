@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 export async function generateMetadata(): Promise<Metadata> {
   const host = (await headers()).get("host");
-  if (isMarketingHost(host)) return { title: "One Day Easy · เว็บไซต์ร้านค้า เสร็จในวันเดียว ผ่าน LINE", description: "ดูตัวอย่างเว็บร้านคุณก่อน ถูกใจค่อยจ่าย เริ่มต้น 990 บาท ไม่มีมัดจำ", openGraph: { locale: "th_TH", type: "website" } };
+  if (isMarketingHost(host)) return { title: "One Day Easy · เว็บไซต์ / Landing page ทุกธุรกิจ เสร็จในวันเดียว ผ่าน LINE", description: "เลือกเทมเพลต ปรับตามที่ต้องการ ดูตัวอย่างก่อน ถูกใจค่อยจ่าย เริ่มต้น 990 บาท ไม่มีมัดจำ", openGraph: { locale: "th_TH", type: "website" } };
   const site = await siteByHost(host);
   if (!site) return { title: "ไม่พบเว็บไซต์" };
   const hero = (site.config.hero ?? {}) as Record<string, unknown>;

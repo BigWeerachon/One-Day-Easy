@@ -1,5 +1,5 @@
 import "server-only";
-import { businessOf, AGENT_TEMPLATE } from "./business";
+import { businessOf, AGENT_TEMPLATE, agentTemplateFor } from "./business";
 import { q, one } from "./db";
 import * as S from "./store";
 import { TEMPLATES, validateBlock, runChecks } from "./blocks";
@@ -14,7 +14,7 @@ const MAX_IMAGES = 8; // จำกัดจำนวนรูปที่ส่�
 /** เทมเพลตเริ่มต้นตามประเภทร้าน · คาเฟ่ = T1 · ร้านอาหารและอื่นๆ = T3 */
 export function pickTemplate(kind: string | null, suggested: string | null | undefined) {
   const b = businessOf(kind);
-  if (b === "car_dealer" || b === "hotel_camp") return AGENT_TEMPLATE[b]; // ธุรกิจใหม่ใช้เทมเพลตของธุรกิจเสมอ
+  if (b !== "restaurant" && b !== "cafe") return agentTemplateFor(kind); // ธุรกิจอื่นใช้เทมเพลตที่อนุมัติแล้วของธุรกิจเสมอ
   if (suggested && TEMPLATES.some((t) => t.id === suggested)) return suggested;
   return AGENT_TEMPLATE[b];
 }

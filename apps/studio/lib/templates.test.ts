@@ -69,3 +69,15 @@ test("ที่พัก/แคมป์: ต้องมีบล็อกห�
   assert.ok(noRooms.some((x) => !x.ok && /บังคับครบ/.test(x.name)));
   assert.equal(visibleBlocks(h1, sampleConfig("hotel_camp", "sample")).find((b) => b.type === "rooms")?.variant, "cards");
 });
+
+test("เทมเพลตทั่วไป G1–G4 ใน migration ผ่านการตรวจอัตโนมัติทุกข้อ", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { checkTemplate } = await import("@ode/blocks/templates");
+  const sql = readFileSync(new URL("../../../supabase/migrations/0020_general_landing.sql", import.meta.url), "utf8");
+  const rows = [...sql.matchAll(/\('(G\d)', 1, '([^']+)', 'general', '(\{.*?\})'/g)];
+  assert.equal(rows.length, 4);
+  for (const [, key, name, spec] of rows) {
+    const failed = checkTemplate({ name, business: "general", ...JSON.parse(spec) }).filter((c) => !c.ok);
+    assert.deepEqual(failed, [], key);
+  }
+});

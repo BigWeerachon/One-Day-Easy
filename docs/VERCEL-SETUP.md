@@ -20,11 +20,11 @@
 ## 1. Supabase
 
 - [ ] คัดลอก connection string แบบ **Transaction pooler (port 6543)** สำหรับ Vercel
-- [ ] รัน migration ทั้งหมดจากเครื่อง (รวม `0019_hotel_camp.sql` ใหม่):
+- [ ] รัน migration ทั้งหมดจากเครื่อง (รวม `0019_hotel_camp.sql` และ `0020_general_landing.sql` ใหม่):
   ```bash
   DATABASE_URL=<direct connection 5432> npm run db:setup -w apps/studio
   ```
-- [ ] ตรวจว่ามีเทมเพลตตั้งต้นครบ 4 ชุด: R1 C1 D1 H1 (หน้า Studio → เทมเพลต)
+- [ ] ตรวจว่ามีเทมเพลตตั้งต้นครบ 8 ชุด: R1 C1 D1 H1 + ทั่วไป G1 G2 G3 G4 (หน้า Studio → เทมเพลต)
 
 ## 2. Vercel โปรเจกต์ Studio (`apps/studio`)
 
