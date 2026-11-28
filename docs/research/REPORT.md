@@ -3,7 +3,8 @@
 วันที่ 27 พ.ย. 2026 · ทำตอนผู้ก่อตั้งนอน จึงไม่มีการสัมภาษณ์คนจริงเลยสักราย
 **ข้อมูลทั้งหมดในไฟล์นี้เป็นสมมติฐาน** ยกเว้นข้อมูลตลาดที่มีลิงก์แหล่งที่มา ต้องเอาไปพิสูจน์กับร้านจริง (ข้อ 7)
 
-ไฟล์ประกอบ
+ไฟล์ประกอบ (รันสกิลจริงแยกไฟล์ละตัว)
+- `02-market.md` market-research · `03-user-research-plan.md` design:user-research · `04-synthesis.md` product-management:synthesize-research · `05-customer-voice.md` sales:customer-voice · บอร์ดรอบ 3 ที่ `founder/board.md` (founder-board · 3 lens รันแยกกัน)
 - `simulate.mjs` ตัวจำลอง (ใช้ seed คงที่ รันซ้ำได้ผลเดิม: `node docs/research/simulate.mjs`)
 - `customers-100.json` ลูกค้าจำลองทั้ง 100 ราย พร้อมขั้นที่ไปถึงและเหตุผล
 
@@ -97,7 +98,7 @@
 
 ---
 
-## 3. founder-board — บอร์ด 3 มุมมอง (รอบ 3)
+## 3. founder-board — บอร์ด 3 มุมมอง (ร่างแรก · ผลจริงดู `founder/board.md`: 4.3/10 FUND IF ×3)
 
 รอบ 1–2 ได้ 3.7/10 FUND IF เพราะ "ไม่มีหลักฐานจริงเลย" (ดู `founder/board.md`)
 | มุมมอง | คะแนน | โหวต | ความเห็นรอบนี้ |
