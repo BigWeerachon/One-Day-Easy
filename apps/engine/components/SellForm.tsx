@@ -2,9 +2,8 @@
 import { useState } from "react";
 import { SELL_CAR_PHOTOS, GEARS, parseSellCar } from "@ode/blocks/leads";
 
-const field: React.CSSProperties = { display: "block", width: "100%", minHeight: 44, padding: "8px 10px", marginTop: 4, borderRadius: 8, border: "1px solid #8888", font: "inherit" };
 const F = ({ label, name, ...p }: { label: string; name: string } & React.InputHTMLAttributes<HTMLInputElement>) =>
-  <label style={{ display: "block", marginTop: 12 }}>{label}<input name={name} style={field} {...p} /></label>;
+  <label className="fld">{label}<input name={name} {...p} /></label>;
 
 /** ย่อรูปในเครื่องก่อนส่ง (ด้านยาว 1280px, JPEG) · Vercel รับ body ได้ไม่เกิน 4.5 MB ต่อคำขอ */
 async function shrink(f: File): Promise<Blob> {
@@ -39,7 +38,7 @@ export default function SellForm({ target }: { target: { slug?: string } }) {
     setState(res?.ok ? { done: true } : { error: j.error ?? "ส่งไม่สำเร็จ ลองใหม่อีกครั้ง" });
   }
   return (
-    <form onSubmit={submit} noValidate className="card item" style={{ maxWidth: 560 }}>
+    <form onSubmit={submit} noValidate className="card form">
       <F label="ชื่อ" name="name" autoComplete="name" required />
       <F label="เบอร์โทร" name="phone" type="tel" autoComplete="tel" required />
       <F label="จังหวัดที่รถอยู่" name="province" required />
@@ -47,19 +46,19 @@ export default function SellForm({ target }: { target: { slug?: string } }) {
       <F label="รุ่น" name="model" placeholder="เช่น Yaris 1.2 G" required />
       <F label="ปีรถ (ค.ศ.)" name="year" inputMode="numeric" placeholder="2019" required />
       <F label="เลขไมล์ (กม.)" name="mileage" inputMode="numeric" required />
-      <fieldset style={{ marginTop: 12, border: 0, padding: 0 }}><legend>เกียร์</legend>
-        {GEARS.map((g) => <label key={g} style={{ display: "inline-flex", alignItems: "center", gap: 6, minHeight: 44, marginRight: 16 }}><input type="radio" name="gear" value={g} />{g}</label>)}
+      <fieldset className="choices"><legend>เกียร์</legend>
+        {GEARS.map((g) => <label key={g} className="check"><input type="radio" name="gear" value={g} />{g}</label>)}
       </fieldset>
       <F label="สี (ไม่บังคับ)" name="color" />
       <F label="ราคาที่ต้องการ (บาท, ไม่บังคับ)" name="asking" inputMode="numeric" />
-      <label style={{ display: "block", marginTop: 12 }}>รายละเอียดเพิ่มเติม (ไม่บังคับ)<textarea name="note" maxLength={300} style={{ ...field, minHeight: 88 }} /></label>
-      <label style={{ display: "block", marginTop: 12 }}>รูปรถ {SELL_CAR_PHOTOS.min}–{SELL_CAR_PHOTOS.max} รูป (หน้า หลัง ข้าง ภายใน เลขไมล์)
-        <input name="photos" type="file" accept={SELL_CAR_PHOTOS.mimes.join(",")} multiple style={field} /></label>
-      <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, minHeight: 44 }}>
-        <input type="checkbox" name="consent" value="1" style={{ width: 22, height: 22 }} />
+      <label className="fld">รายละเอียดเพิ่มเติม (ไม่บังคับ)<textarea name="note" maxLength={300} /></label>
+      <label className="fld">รูปรถ {SELL_CAR_PHOTOS.min}–{SELL_CAR_PHOTOS.max} รูป (หน้า หลัง ข้าง ภายใน เลขไมล์)
+        <input name="photos" type="file" accept={SELL_CAR_PHOTOS.mimes.join(",")} multiple /></label>
+      <label className="check">
+        <input type="checkbox" name="consent" value="1" />
         <span>ยินยอมให้ร้านเก็บชื่อ เบอร์ และรูปรถ เพื่อติดต่อเสนอราคาเท่านั้น</span></label>
-      {state.error && <p role="alert" style={{ marginTop: 12 }}>⚠ {state.error}</p>}
-      <button className="cta" style={{ marginTop: 16, minHeight: 44 }} disabled={state.busy}>{state.busy ? "กำลังส่ง…" : "ส่งข้อมูลรถ"}</button>
+      {state.error && <p role="alert" className="err">⚠ {state.error}</p>}
+      <button className="cta" disabled={state.busy} aria-busy={state.busy}>{state.busy ? "กำลังส่ง…" : "ส่งข้อมูลรถ"}</button>
     </form>
   );
 }

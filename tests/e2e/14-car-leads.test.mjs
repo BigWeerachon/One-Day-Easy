@@ -1,7 +1,7 @@
 // เต็นท์รถ: ฟอร์ม "ขายรถให้เรา" บนเว็บ → Engine ส่งต่อ Studio (ลงลายเซ็น) → บันทึก + แจ้งร้านทาง LINE → ร้านดู/อัปเดตสถานะใน Portal
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { URLS, resetDb, closeDb, closeBrowser, getBrowser, chat, lineText, linePushes, waitFor, sql, val } from "./lib.mjs";
+import { URLS, resetDb, closeDb, closeBrowser, getBrowser, chat, lineText, linePushes, waitFor, sql, val, mockPost } from "./lib.mjs";
 
 const C = "00000000-0000-0000-0000-0000000000c5"; // ใช้ร้าน Moka House (ออนไลน์แล้ว) เป็นเต็นท์รถ
 const U = "Ue2emoka000000000000000000000001";
@@ -69,4 +69,30 @@ test("พิมพ์ \"ดูข้อเสนอ\" ใน LINE → ลิง�
   // รูปของร้านอื่นเปิดไม่ได้
   const bad = await p.request.get(url.replace(/\/leads$/, "/leads/file/999999"));
   assert.equal(bad.status(), 404);
+});
+
+test("LINE ส่งไม่ออก → ข้อมูลยังบันทึก แต่ไม่ถูกนับว่าแจ้งร้านแล้ว", async () => {
+  await mockPost("line", "/__mode", "400");
+  try {
+    const { devices } = await import("playwright");
+    const p = await (await (await getBrowser()).newContext({ ...devices["iPhone 13"] })).newPage();
+    await p.goto(`${URLS.engine}/s/mokahouse/sell`);
+    for (const [l, v] of [["ชื่อ", "สมหญิง"], ["เบอร์โทร", "0899999999"], ["จังหวัดที่รถอยู่", "ปทุมธานี"], ["ยี่ห้อ", "Mazda"], ["รุ่น", "2 Sport"], ["ปีรถ (ค.ศ.)", "2018"], ["เลขไมล์ (กม.)", "80000"]])
+      await p.getByLabel(l, { exact: true }).fill(v);
+    await p.getByLabel("ธรรมดา").check();
+    await p.locator("input[name=photos]").setInputFiles([1, 2, 3, 4].map((i) => ({ name: `c${i}.png`, mimeType: "image/png", buffer: PNG })));
+    await p.getByLabel(/ยินยอมให้ร้านเก็บ/).check();
+    await p.getByRole("button", { name: "ส่งข้อมูลรถ" }).click();
+    await p.getByText("ส่งข้อมูลรถแล้ว").waitFor();
+    assert.equal(await val(`select notified_at is null from site_leads where phone = '0899999999'`), true, "ไม่ถึง LINE = ไม่ตั้ง notified_at");
+  } finally { await mockPost("line", "/__mode", "ok"); }
+});
+
+test("ช่องกรอกและปุ่มบนหน้าขายรถสูงอย่างน้อย 44px", async () => {
+  const p = await (await (await getBrowser()).newContext({ viewport: { width: 375, height: 800 } })).newPage();
+  await p.goto(`${URLS.engine}/s/mokahouse/sell`);
+  const small = await p.locator("form input:not([type=checkbox]):not([type=radio]):not([type=hidden]), form textarea, form button, form label.check")
+    .evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height < 44).map((e) => e.outerHTML.slice(0, 60)));
+  assert.deepEqual(small, []);
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "ไม่มีเลื่อนแนวนอนบนมือถือ");
 });

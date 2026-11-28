@@ -240,9 +240,11 @@ export async function reply(clientId: string, text: string) {
     if (!to) return null;
     const [t] = await rows<{ id: string }>(c, `insert into tasks (name, idempotency_key, payload) values ('line.push · ตอบแชท', $1, $2) returning id::text`,
       [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID() })]);
-    return t.id;
+    return { task: t.id, msg: m.id };
   });
-  if (taskId) await runLinePush(taskId);
+  if (!taskId) return "none";
+  await runLinePush(taskId.task);
+  return (await one<{ d: string }>(`select delivery d from messages where id = $1`, [taskId.msg]))?.d === "sent" ? "sent" : "failed";
 }
 
 const MAX_ATTEMPTS = 3;
@@ -470,7 +472,8 @@ export async function dropIfNotSlip(slipId: string) {
 }
 
 /** ข้อความจากระบบถึงลูกค้า (เช่น แจ้งผลสลิป) · ไม่เปลี่ยนสถานะอ่านแล้วของแชท */
-export async function sendSystemMessage(clientId: string, text: string, quick?: QuickItem[], image?: string) {
+/** คืนสถานะการส่ง: sent = ถึง LINE แล้ว · failed = ส่งไม่ออก (ระบบลองใหม่เอง) · none = ร้านไม่มี LINE/ห้องแชท */
+export async function sendSystemMessage(clientId: string, text: string, quick?: QuickItem[], image?: string): Promise<"sent" | "failed" | "none"> {
   const to = await lineUserIdOf(clientId);
   const taskId = await tx(async (c) => {
     const [cv] = await rows<{ id: string }>(c, `select id from conversations where client_id = $1`, [clientId]);
@@ -479,9 +482,11 @@ export async function sendSystemMessage(clientId: string, text: string, quick?: 
     if (!to) return null;
     const [t] = await rows<{ id: string }>(c, `insert into tasks (name, idempotency_key, payload) values ('line.push · แจ้งลูกค้า', $1, $2) returning id::text`,
       [`msg:${m.id}:line.push`, JSON.stringify({ message_id: m.id, to, retry_key: randomUUID(), quick, image })]);
-    return t.id;
+    return { task: t.id, msg: m.id };
   });
-  if (taskId) await runLinePush(taskId);
+  if (!taskId) return "none";
+  await runLinePush(taskId.task);
+  return (await one<{ d: string }>(`select delivery d from messages where id = $1`, [taskId.msg]))?.d === "sent" ? "sent" : "failed";
 }
 
 export const hasOpenInvoice = async (clientId: string) =>

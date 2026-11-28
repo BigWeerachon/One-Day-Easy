@@ -51,8 +51,10 @@ export async function ingestSellCar(input: IngestInput) {
   });
   // แจ้งร้านทาง LINE ทันที · ส่งไม่ได้ (ร้านไม่มี LINE/LINE ล่ม) → ข้อมูลยังอยู่ใน Portal และ Studio
   try {
-    await S.sendSystemMessage(site.client_id, sellCarMessage({ id, ...r.value }, null) + `\n\nพิมพ์ "ดูข้อเสนอ" เพื่อรับลิงก์ดูรูปและอัปเดตสถานะ`);
-    await q(`update site_leads set notified_at = now() where id = $1`, [id]);
+    const sent = await S.sendSystemMessage(site.client_id, sellCarMessage({ id, ...r.value }, null) + `\n\nพิมพ์ "ดูข้อเสนอ" เพื่อรับลิงก์ดูรูปและอัปเดตสถานะ`);
+    // บันทึกว่าแจ้งแล้ว เฉพาะเมื่อถึง LINE จริง · ไม่ถึง → notified_at ว่าง ทีมเห็นในรายการที่ต้องตามเอง
+    if (sent === "sent") await q(`update site_leads set notified_at = now() where id = $1`, [id]);
+    else console.warn("lead notify", id, sent);
   } catch (e) { console.error("lead notify", e); }
   return { id };
 }
