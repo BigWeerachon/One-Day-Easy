@@ -14,6 +14,7 @@ export const TRANSITIONS: Transition[] = [
   { from: "new_chat", to: "intake", by: "system", condition: "สร้าง client แล้ว" },
   { from: "intake", to: "template", by: "system", condition: "เช็กลิสต์ครบ + ยินยอม PDPA" },
   { from: "template", to: "client_review", by: "human", condition: "ตรวจผ่าน 6/6" },
+  { from: "template", to: "client_review", by: "system", condition: "QA Agent ตรวจผ่าน + ตรวจผ่าน 6/6" },
   { from: "client_review", to: "template", by: "client", condition: "ขอแก้ · นับรอบ" },
   { from: "client_review", to: "invoice", by: "client", condition: "กดอนุมัติ" },
   { from: "invoice", to: "payment", by: "system", condition: "ใบแจ้งหนี้ออกแล้ว" },

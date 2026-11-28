@@ -59,3 +59,16 @@ test("PDF ต้องล็อกอินและมีสิทธิ์ก�
   assert.match(ok.headers()["content-type"], /application\/pdf/);
   assert.equal((await ok.body()).subarray(0, 4).toString(), "%PDF");
 });
+
+test("owner ตรวจความพร้อมระบบได้ · เห็นผลจริงของ DB/LINE/Vercel/AI", async () => {
+  const p = await loginAs("owner");
+  await p.goto(`${URLS.studio}/settings`);
+  await p.getByRole("link", { name: "ตรวจตอนนี้" }).click();
+  await p.waitForURL(/check=1/);
+  const row = (re) => p.locator("[data-check]", { hasText: re });
+  assert.equal(await row(/Migration/).getAttribute("data-check"), "ok");
+  assert.equal(await row(/Access token/).getAttribute("data-check"), "ok");
+  assert.equal(await row(/Webhook/).getAttribute("data-check"), "ok");
+  assert.equal(await row(/Anthropic/).getAttribute("data-check"), "ok");
+  assert.equal(await row(/INSECURE_COOKIES/).getAttribute("data-check"), "fail", "ค่าเทสต้องถูกเตือนบน production");
+});

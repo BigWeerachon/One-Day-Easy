@@ -1,6 +1,8 @@
 import { requirePage } from "@/lib/auth";
-import { one } from "@/lib/db";
-import { setClientEmailAction } from "@/lib/notify-actions";
+import { listRuns } from "@/lib/agents";
+import { runAgentsAction } from "@/lib/actions";
+import { one, q } from "@/lib/db";
+import { setClientEmailAction, setSabaiLinkAction } from "@/lib/notify-actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClient, clientNotes, listJobs, listSites, listDocs, listEvents, getIntake } from "@/lib/store";
@@ -18,6 +20,8 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   const { id } = await params; const { err, portal, sent } = await searchParams;
   const c = await getClient(id); if (!c) notFound();
   const [jobs, sites, docs, notes, ik] = await Promise.all([listJobs(id), listSites(id), listDocs(id), clientNotes(id), getIntake(id)]);
+  // คีย์ไม่ส่งมาที่หน้าจอ · บอกแค่ว่าเชื่อมแล้วกับ API ไหน
+  const sabai = new Map((await q<{ id: string; api: string }>(`select id, sabai_api api from sites where client_id = $1 and sabai_key is not null`, [id])).map((r) => [r.id, r.api]));
   const intake = ik?.intake;
   const email = (await one<{ v: string }>(`select value v from contacts where client_id = $1 and channel = 'Email' order by id desc limit 1`, [id]))?.v;
   const evs = jobs.length ? await listEvents(jobs.map((j) => j.id), 20) : [];
@@ -38,10 +42,20 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
                 <label className="f"><input type="checkbox" name="pdpa" defaultChecked={j.pdpa} /> ยินยอม PDPA</label>
                 <button className="btn o sm">บันทึก</button></form>
               <JobActions job={j} back={back} />
+              <AgentPanel jobId={j.id} stage={j.stage} back={back} />
             </Card>))}
           <Card title="เว็บไซต์" pad={false}><div className="tw"><table><tbody>
             {sites.map((s) => <tr key={s.id}><td className="mono">{s.domain}</td><td>{s.template}</td><td>v{s.version}</td><td><span className={"chip " + (s.status === "live" ? "c-g" : s.status === "down" ? "c-r" : "c-y")}>{s.status}</span></td><td><Link className="btn o sm" href={`/builder?site=${s.id}`}>แก้</Link></td></tr>)}
             {!sites.length && <tr><td className="mut">ยังไม่มีเว็บ</td></tr>}
+            {sites.map((s) => <tr key={`sabai-${s.id}`}><td colSpan={5}>
+              <form action={setSabaiLinkAction} className="f" aria-label={`เชื่อม ${s.domain} กับระบบร้าน Sabai`}>
+                <input type="hidden" name="client" value={id} /><input type="hidden" name="site" value={s.id} />
+                <span className="mut">ระบบร้าน Sabai {sabai.get(s.id) ? "· เชื่อมแล้ว" : ""}</span>
+                <input className="inp" name="api" placeholder="https://api.ร้าน.com" defaultValue={sabai.get(s.id) ?? ""} aria-label="ที่อยู่ API ของ Sabai" />
+                <input className="inp mono" name="key" placeholder={sabai.get(s.id) ? "เว้นว่าง = ใช้คีย์เดิม" : "sbw_…"} aria-label="คีย์เว็บไซต์ของสาขา" autoComplete="off" />
+                <button className="btn sm o">บันทึก</button>
+              </form>
+            </td></tr>)}
           </tbody></table></div></Card>
           <Card title="เอกสาร" pad={false}><div className="tw"><table><tbody>
             {docs.map((d) => <tr key={d.no}><td className="mono">{d.no}</td><td>{DOC_LABEL[d.type]}</td><td>{baht(d.total)}</td><td>{d.status}</td><td>{can(me.role, "finance.view") && <a className="btn o sm" href={`/api/docs/${d.no}/pdf`} target="_blank" rel="noopener">PDF</a>}</td></tr>)}
@@ -70,4 +84,35 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
       </div>
     </div>
   </>);
+}
+
+const AGENT_LABEL: Record<string, string> = { sales: "Sales", intake: "Intake", design: "Design", builder: "Builder", qa: "QA", dev: "Dev", ops: "Ops" };
+const OUTCOME: Record<string, [string, string]> = {
+  designed: ["ออกแบบแล้ว", "c-p"], skipped: ["ข้าม", ""], pass: ["ตรวจผ่าน", "c-g"], fail: ["ตรวจไม่ผ่าน", "c-y"], escalated: ["ส่งต่อคน", "c-r"], error: ["ผิดพลาด", "c-r"], drafted: ["ร่างเว็บ", "c-b"], fixed: ["แก้แล้ว", "c-b"],
+  no_change: ["แก้ไม่ได้", "c-y"], asked: ["ถามลูกค้า", "c-p"], answered: ["ลูกค้าตอบ", "c-p"], followed_up: ["ตามลูกค้า", ""], replied: ["ตอบลูกค้า", "c-g"], handoff: ["ส่งต่อคน", "c-y"],
+};
+const STATUS: Record<string, [string, string]> = { running: ["Agent กำลังทำ", "c-b"], waiting_customer: ["รอลูกค้าตอบ", "c-p"], needs_human: ["ต้องให้คนดู", "c-r"], sent: ["ส่งลูกค้าตรวจแล้ว", "c-g"] };
+/** สิ่งที่ทีม Agent ทำกับงานนี้ · ทุกรายการมาจาก agent_runs */
+async function AgentPanel({ jobId, stage, back }: { jobId: string; stage: string; back: string }) {
+  const [runs, st] = await Promise.all([listRuns(jobId, 12), one<{ s: string | null; n: string | null }>(`select agent_status s, agent_note n from jobs where id = $1`, [jobId])]);
+  if (!runs.length && !st?.s && stage !== "template") return null;
+  const issues = (d: Record<string, unknown>) => ((d.issues as { severity: string; block: string; problem: string }[] | undefined) ?? []).filter((i) => i.severity === "block");
+  return (
+    <div style={{ marginTop: 14, borderTop: "1px solid #eef0f4", paddingTop: 12 }}>
+      <div className="f" style={{ justifyContent: "space-between" }}>
+        <b className="sm">ทีม Agent {st?.s && <span className={"chip " + STATUS[st.s][1]} style={{ marginLeft: 6 }}>{STATUS[st.s][0]}</span>}</b>
+        {stage === "template" && <form action={runAgentsAction}><input type="hidden" name="job" value={jobId} /><input type="hidden" name="back" value={back} /><SubmitButton className="btn o sm" pending="Agent กำลังทำ…">ให้ Agent ทำต่อ</SubmitButton></form>}
+      </div>
+      {st?.n && <div className="note sm" style={{ marginTop: 8 }}>{st.n}</div>}
+      <div className="list sm" style={{ gap: 6, marginTop: 8 }}>{runs.map((r) => <div key={r.id}>
+        <span className="mut">{new Date(r.at).toLocaleString("th-TH", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}</span> <b>{AGENT_LABEL[r.agent]}</b> <span className={"chip " + (OUTCOME[r.outcome]?.[1] ?? "")}>{OUTCOME[r.outcome]?.[0] ?? r.outcome}</span>
+        {typeof r.detail.summary === "string" && <span className="mut"> {r.detail.summary}</span>}
+        {typeof r.detail.why === "string" && <span className="mut"> {r.detail.why}</span>}
+        {issues(r.detail).map((i, k) => <div key={k} className="mut" style={{ marginLeft: 12 }}>• [{i.block}] {i.problem}</div>)}
+        {Array.isArray(r.detail.problems) && (r.detail.problems as string[]).map((x, k) => <div key={k} className="mut" style={{ marginLeft: 12 }}>• {x}</div>)}
+        {r.agent === "design" && <div className="mut" style={{ marginLeft: 12 }}>เทมเพลต {String(r.detail.template)} · โทน: {String(r.detail.tone)} {Object.entries((r.detail.theme ?? {}) as Record<string, unknown>).filter(([, v]) => typeof v === "string" && /^#/.test(v as string)).map(([k, v]) => <span key={k} title={k} style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: v as string, border: "1px solid #d6dae3", marginLeft: 3, verticalAlign: "middle" }} />)}</div>}
+        {Array.isArray(r.detail.questions) && <div className="mut" style={{ marginLeft: 12 }}>{(r.detail.questions as string[]).join(" · ")}</div>}
+      </div>)}</div>
+    </div>
+  );
 }

@@ -3,18 +3,21 @@ import Link from "next/link";
 import { listJobs, listSlips, listTasks, listSites, listDocs, listClients, avgEditRounds, avgTokensPerSite } from "@/lib/store";
 import { STAGE_LABEL, type Stage } from "@/lib/workflow";
 import { baht } from "@/lib/money";
+import { q } from "@/lib/db";
 import { Header, Card, Kpi } from "@/components/ui";
 
 export default async function Today({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const me = await requirePage("work.view");
   const tab = (await searchParams).tab === "board" ? 1 : 0;
   const [jobs, slips, tasks, sites, docs, clients, rounds, tokens] = await Promise.all([listJobs(), listSlips(), listTasks(), listSites(), listDocs(), listClients(), avgEditRounds(), avgTokensPerSite()]);
+  const needsHuman = new Map((await q<{ id: string; note: string | null }>(`select id, agent_note note from jobs where agent_status = 'needs_human' and stage = 'template'`)).map((r) => [r.id, r.note]));
   const pkg = Object.fromEntries(clients.map((c) => [c.id, c.pkg]));
   const sla = (h: number | null) => h ?? 999;
   const queue = [
     ...jobs.filter((j) => j.stage === "template").map((j) => ({ t: j.siteId ? "ปรับเนื้อหาก่อนส่งลูกค้า" : "เลือกเทมเพลต", sla: sla(j.slaHours), d: `${j.title} · ${j.siteId ? `ร่าง ${j.template} · ตรวจผ่าน ${j.checksPassed}/6` : "ข้อมูลครบจากฟอร์มลูกค้า"}`, href: `/builder?job=${j.id}`, cta: j.siteId ? "เปิดปรับแก้" : "เลือกเทมเพลต" })),
     ...slips.map((s) => ({ t: "สลิปรอตรวจ", sla: -1, d: `${s.clientName ?? "ไม่ทราบลูกค้า"}${s.docNo ? ` · ${s.docNo}` : ""} · ${(s.checks ?? []).filter((c) => !c.ok).map((c) => c.rule).join(", ") || (s.amount != null && s.due != null && s.amount !== s.due ? `สลิป ${baht(s.amount)} ยอดค้าง ${baht(s.due)}` : "รอคนยืนยัน")}`, href: "/finance", cta: "ตรวจ" })),
     ...jobs.filter((j) => j.stage === "client_review" && sla(j.slaHours) < 0).map((j) => ({ t: "ลูกค้าไม่ตอบเกินกำหนด", sla: sla(j.slaHours), d: `${j.title} · เกินมา ${-sla(j.slaHours)} ชม.`, href: `/clients/${j.clientId}`, cta: "เปิดโปรไฟล์" })),
+    ...jobs.filter((j) => needsHuman.has(j.id)).map((j) => ({ t: "Agent ส่งต่อให้คนดู", sla: -50, d: `${j.title} · ${needsHuman.get(j.id) ?? "QA ไม่ผ่าน"}`, href: `/clients/${j.clientId}`, cta: "เปิดงาน" })),
     ...tasks.filter((t) => t.status === "dead").map((t) => ({ t: "งานอัตโนมัติล้มเหลว", sla: -99, d: `${t.name} · ${t.error} (dead-letter)`, href: "/workflow", cta: "ดูงาน" })),
   ].sort((a, b) => a.sla - b.sla);
   const cols: Stage[] = ["new_chat", "intake", "template", "client_review", "invoice", "payment", "online", "paused"];

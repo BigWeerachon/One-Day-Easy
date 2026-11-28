@@ -36,3 +36,21 @@ export async function setClientEmailAction(f: FormData) {
     if (email) await q(`insert into contacts (client_id, channel, value, name) values ($1, 'Email', $2, $2) on conflict (channel, value) do update set client_id = excluded.client_id`, [id, email]);
   });
 }
+
+/** เชื่อมเว็บกับระบบร้าน Sabai: ที่อยู่ API + คีย์เว็บไซต์ของสาขา (จาก Sabai → ตั้งค่า → สาขา → เชื่อมเว็บไซต์ร้าน) · ว่างทั้งคู่ = เลิกเชื่อม */
+export async function setSabaiLinkAction(f: FormData) {
+  await requireStaff("clients.edit");
+  const client = str(f, "client"), site = str(f, "site");
+  const api = str(f, "api").replace(/\/+$/, ""), key = str(f, "key");
+  await run(`/clients/${client}`, async () => {
+    if (!api && !key) {
+      await q(`update sites set sabai_api = null, sabai_key = null where id = $1 and client_id = $2`, [site, client]);
+      return;
+    }
+    if (!/^https:\/\/[\w.-]+(:\d+)?(\/[\w./-]*)?$/.test(api)) throw new Error("ที่อยู่ API ต้องขึ้นต้นด้วย https://");
+    // เว้นคีย์ว่าง = ใช้คีย์เดิม (คีย์ไม่แสดงซ้ำบนหน้าจอ)
+    if (key && !/^sbw_[0-9a-f]{48}$/.test(key)) throw new Error("คีย์ไม่ถูกต้อง (ขึ้นต้นด้วย sbw_)");
+    const r = await q(`update sites set sabai_api = $3, sabai_key = coalesce(nullif($4, ''), sabai_key) where id = $1 and client_id = $2 and (nullif($4, '') is not null or sabai_key is not null) returning id`, [site, client, api, key]);
+    if (!r.length) throw new Error("ใส่คีย์เว็บไซต์จาก Sabai ด้วย");
+  }, "sabai");
+}

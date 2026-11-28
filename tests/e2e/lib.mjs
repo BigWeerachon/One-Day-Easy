@@ -94,7 +94,7 @@ export function engineGet(host, path = "/") {
   const u = new URL(URLS.engine);
   return new Promise((resolve, reject) => {
     http.get({ hostname: u.hostname, port: u.port, path, headers: { host } }, (res) => {
-      let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b }));
+      let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b, headers: res.headers }));
     }).on("error", reject);
   });
 }

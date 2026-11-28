@@ -14,7 +14,7 @@
 .lead{font-size:clamp(16px,2.4vw,20px);opacity:.92;margin:0 0 22px}
 .hero-img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--r)}
 .cta{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;border-radius:999px;background:var(--a);color:#141a2b;font-weight:700;text-decoration:none}
-.cta.sm{min-height:36px;padding:0 16px;font-size:14px}
+.cta.sm{min-height:44px;min-width:44px;padding:0 16px;font-size:14px}
 .sx{padding:clamp(36px,6vw,64px) 0}.sx.alt{background:color-mix(in srgb,var(--p) 6%,var(--bg))}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
 .card{background:var(--sf);border-radius:var(--r);border:1px solid color-mix(in srgb,var(--tx) 9%,transparent)}
@@ -23,7 +23,7 @@
 .price{color:var(--p);font-weight:700;white-space:nowrap}
 .dark .price{color:var(--a)}
 .meta{opacity:.7;font-size:14px}
-.tag{display:inline-block;background:var(--a);color:#141a2b;border-radius:999px;padding:0 10px;font-size:12px}
+.tag{display:inline-block;background:var(--a);color:#141a2b;border-radius:999px;padding:2px 10px;font-size:14px}
 .big{font-size:30px;font-weight:700;font-family:var(--hfont)}.big small{font-size:14px;opacity:.7}
 .plan ul{padding-left:18px;margin:6px 0 0}
 .stars{color:#f5a524;font-size:22px;margin-bottom:12px}
@@ -34,3 +34,28 @@
 .foot{padding:28px 0;border-top:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
 .site a{color:inherit}.site a.cta{color:#141a2b}
 .ribbon{position:fixed;top:66px;right:12px;z-index:9;background:rgba(20,26,43,.88);color:#fff;border-radius:999px;padding:4px 12px;font:600 12px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+/* หน้าตาของบล็อก (ระบบเทมเพลต) · ทุกแบบต้องไม่ล้นบนจอ 360px */
+.site,.site *{overflow-wrap:anywhere}
+.hero.v-cover{background-size:cover;background-position:center;min-height:min(70vh,560px);display:flex;align-items:center}
+.vlist{display:flex;flex-direction:column;gap:0;background:var(--sf);border-radius:var(--r);border:1px solid color-mix(in srgb,var(--tx) 9%,transparent)}
+.vlist .item{border-radius:0;border:0;border-bottom:1px solid color-mix(in srgb,var(--tx) 8%,transparent);background:none}
+.vlist .item:last-child{border-bottom:0}.vlist .item img{display:none}
+.gallery.strip{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px}
+.gallery.strip img{flex:0 0 min(70%,280px);scroll-snap-align:start}
+.quotes blockquote{font-size:clamp(18px,3vw,24px);text-align:center;padding:28px}
+.logo{height:28px;width:auto;max-width:120px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:6px}
+.row>*{min-width:0}
+
+/* ฟอร์ม (ขายรถให้เรา) · ใช้ token ของธีมเท่านั้น */
+.form{max-width:560px;padding:16px;display:grid;gap:12px}
+.fld{display:grid;gap:4px;font-size:16px}
+.fld input:not([type=checkbox]):not([type=radio]),.fld textarea{min-height:44px;padding:8px 12px;font:inherit;font-size:16px;color:var(--tx);background:var(--bg);border:1px solid color-mix(in srgb,var(--tx) 24%,transparent);border-radius:min(var(--r),12px)}
+.fld textarea{min-height:96px}
+.choices{border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px 16px}
+.choices legend{padding:0;margin-bottom:4px}
+.check{display:flex;gap:10px;align-items:center;min-height:44px}
+.check input{width:22px;height:22px;accent-color:var(--p)}
+.form :focus-visible,.cta:focus-visible{outline:3px solid var(--p);outline-offset:2px}
+.form .err{color:var(--tx);border-left:4px solid #b42318;padding:8px 12px;background:color-mix(in srgb,#b42318 8%,var(--sf))}
+.form .cta{width:100%}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

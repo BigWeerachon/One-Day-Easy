@@ -4,7 +4,7 @@ import { q, one } from "./db";
 import type { QuickItem } from "./line";
 import * as S from "./store";
 import * as P from "./portal";
-import { previewUrl } from "./preview";
+import { previewUrl, liveUrl } from "./preview";
 import { STAGE_LABEL } from "./workflow";
 
 // ขายในแชท LINE: เมนูแพ็กเกจ → เสนอราคา → ยืนยัน → มัดจำ (QR) → ส่งข้อมูล/รูป → ส่งงานให้ตรวจ → อนุมัติหรือขอแก้ → ชำระส่วนที่เหลือ
@@ -12,19 +12,30 @@ import { STAGE_LABEL } from "./workflow";
 // ข้อความที่ไม่เกี่ยวยังเข้ากล่องข้อความให้ทีมตอบตามปกติ
 
 export const orderBotEnabled = () => (process.env.ORDER_BOT ?? "on") !== "off";
-/** มัดจำตอนยืนยันสั่งทำ เป็น % ของราคาแพ็ก · 0 = ไม่เก็บมัดจำ · สูงสุด 90 (ต้องเหลือยอดให้ออกใบตอนส่งงาน) */
-export const depositPercent = () => Math.min(90, Math.max(0, Math.round(Number(process.env.ORDER_DEPOSIT_PERCENT ?? 50)) || 0));
+/** มัดจำตอนยืนยันสั่งทำ เป็น % ของราคาแพ็ก · ค่าเริ่มต้น 0 = ไม่เก็บมัดจำ ลูกค้าดูตัวอย่างก่อนแล้วจ่ายเต็มตอนอนุมัติ · สูงสุด 90 (ต้องเหลือยอดให้ออกใบตอนส่งงาน) */
+export const depositPercent = () => Math.min(90, Math.max(0, Math.round(Number(process.env.ORDER_DEPOSIT_PERCENT ?? 0)) || 0));
 
 const PKG: Record<string, string> = { "PKG-START": "Start", "PKG-BASIC": "Basic", "PKG-PRO": "Pro", "PKG-BIZ": "Business" };
 const baht = (satang: number) => `${(satang / 100).toLocaleString("th-TH")} บาท`;
 const say = (clientId: string, text: string, quick?: QuickItem[], image?: string) => S.sendSystemMessage(clientId, text, quick, image);
 const packages = () => q<{ code: string; name: string; price: number }>(`select code, name, price_satang::int price from catalog_items where active and code like 'PKG-%' order by price_satang`);
 
-interface Session { awaitEdit?: boolean; paidEditText?: string; askedImgAt?: number; askedWithSlip?: boolean }
+interface Session { awaitInfo?: boolean; awaitEdit?: boolean; paidEditText?: string; askedImgAt?: number; askedWithSlip?: boolean }
 const key = (userId: string) => `od:${userId}`;
 const getSession = async (userId: string) => (await one<{ state: Session }>(`select state from line_booking_sessions where line_user_id = $1`, [key(userId)]))?.state ?? {};
 const setSession = (userId: string, s: Session) =>
   q(`insert into line_booking_sessions (line_user_id, state, updated_at) values ($1,$2,now()) on conflict (line_user_id) do update set state = $2, updated_at = now()`, [key(userId), JSON.stringify(s)]);
+
+/** Intake Agent ถามข้อมูลลูกค้าไว้ → ข้อความถัดไปของลูกค้าคือคำตอบ */
+export async function awaitCustomerInfo(clientId: string) {
+  const userId = await S.lineUserIdOf(clientId);
+  if (userId) await setSession(userId, { ...(await getSession(userId)), awaitInfo: true });
+}
+/** ลูกค้าขอแก้ → ให้ Agent แก้และตรวจ แล้วส่งตัวอย่างใหม่เอง */
+async function agentEdit(jobId: string, text: string) {
+  const { runPipeline } = await import("./agents");
+  await runPipeline(jobId, { force: true, instruction: `ลูกค้าขอแก้: "${text}"` }).catch((e) => console.error("agent edit", e));
+}
 
 /** ลิงก์รูป QR พร้อมเพย์ของใบแจ้งหนี้ (ใช้ได้ 7 วัน) · null ถ้าตั้งค่าไม่ครบหรือไม่ใช่ https (LINE ต้องการ https) */
 export function qrUrl(docNo: string) {
@@ -37,9 +48,11 @@ export function qrUrl(docNo: string) {
 const payHint = () => (process.env.PROMPTPAY_ID ? `พร้อมเพย์ ${process.env.PROMPTPAY_ID}` : "ช่องทางที่ทีมงานแจ้ง");
 
 // ---------- ข้อความเข้า ----------
-export type OrderIntent = "menu" | "status";
+export type OrderIntent = "menu" | "status" | "selfedit" | "leads";
 export function orderIntent(text: string): OrderIntent | null {
   const t = text.toLowerCase();
+  if (/^(ขอ)?(ลิงก์)?(แก้|เปลี่ยน|อัปเดต|อัพเดท)\s*(เว็บ|เมนู|ราคา|รูป|เวลาเปิด|ข้อมูลร้าน)/.test(t.trim())) return "selfedit";
+  if (/^(ขอ)?(ลิงก์)?(ดู)?(ข้อเสนอ|คนขายรถ|รถที่(มีคน)?เสนอขาย|รายการขายรถ)/.test(t.trim())) return "leads";
   if (/สถานะ|ถึงไหน|คืบหน้า|เสร็จ(หรือ)?ยัง|เว็บ(ของ)?(ฉัน|ผม|เรา|หนู).*(ยัง|ไหม)/.test(t)) return "status";
   if (/ทำเว็บ|เว็บไซต์|อยากได้เว็บ|รับทำเว็บ|แพ็ก|package|ราคา|เท่าไ(ร|หร่)|สั่งทำ|สนใจ/.test(t)) return "menu";
   return null;
@@ -49,12 +62,21 @@ export function orderIntent(text: string): OrderIntent | null {
 export async function handleOrderText(clientId: string, userId: string, text: string, firstContact: boolean): Promise<boolean> {
   if (!orderBotEnabled()) return false;
   const sess = await getSession(userId);
+  if (sess.awaitInfo) {
+    // Intake Agent ถามข้อมูลไว้ → ข้อความนี้คือคำตอบ
+    await setSession(userId, { ...sess, awaitInfo: false });
+    await say(clientId, "ขอบคุณค่ะ ได้รับข้อมูลแล้ว กำลังอัปเดตเว็บให้นะคะ");
+    const { customerAnswered } = await import("./agents");
+    return await customerAnswered(clientId, text), true;
+  }
   if (sess.awaitEdit) {
     await setSession(userId, { ...sess, awaitEdit: false });
     return submitEdit(clientId, userId, text), true;
   }
   const intent = orderIntent(text);
   if (intent === "status") return await sendStatus(clientId), true;
+  if (intent === "selfedit" && await sendEditLink(clientId)) return true;
+  if (intent === "leads" && await sendLeadsLink(clientId)) return true;
   if (intent === "menu" || firstContact) return await sendMenu(clientId, firstContact), true;
   return false;
 }
@@ -86,6 +108,31 @@ export async function handleOrderPostback(clientId: string, userId: string, data
   return true;
 }
 
+// ---------- แก้เว็บเอง (หลังออนไลน์) ----------
+/** เว็บออนไลน์แล้ว → ส่งลิงก์หน้าแก้เว็บเอง · ยังไม่ออนไลน์ = false ให้ข้อความไปทางอื่นตามปกติ */
+async function sendEditLink(clientId: string) {
+  const ctx = await P.ctxForClient(clientId);
+  if (!ctx || !["online", "care"].includes(ctx.job.stage)) return false;
+  const { selfEditAccess } = await import("./self-edit");
+  const a = await selfEditAccess(ctx);
+  if (!a.ok) {
+    await say(clientId, "สิทธิ์แก้เว็บเองหมดแล้วค่ะ (แก้เองได้ 1 ปีหลังเว็บออนไลน์ ต่อได้ด้วยค่าดูแลรายปี)\nพิมพ์สิ่งที่อยากแก้มาได้เลย ทีมงานจะแจ้งค่าบริการก่อนแก้ให้ค่ะ");
+    return true;
+  }
+  const token = await P.createPortalLink(clientId, "line-bot");
+  await say(clientId, `ลิงก์แก้เว็บของร้าน (ใช้ได้ ${P.LINK_DAYS} วัน)\n${P.portalUrl(token)}/edit\n\nเปลี่ยนรูปหน้าแรก เมนู ราคา เวลาเปิด และคำถามที่พบบ่อยได้เอง บันทึกแล้วเว็บเปลี่ยนภายใน 1 นาทีค่ะ`);
+  return true;
+}
+
+/** เต็นท์รถ: ลิงก์ดูข้อเสนอขายรถใน Portal (เฉพาะร้านที่เว็บออนไลน์แล้ว) */
+async function sendLeadsLink(clientId: string) {
+  const ctx = await P.ctxForClient(clientId);
+  if (!ctx || !["online", "care"].includes(ctx.job.stage)) return false;
+  const token = await P.createPortalLink(clientId, "line-bot");
+  await say(clientId, `ข้อเสนอขายรถทั้งหมดของร้าน (ลิงก์ใช้ได้ ${P.LINK_DAYS} วัน)\n${P.portalUrl(token)}/leads`);
+  return true;
+}
+
 // ---------- ขั้นตอน ----------
 async function sendMenu(clientId: string, first: boolean) {
   const list = await packages();
@@ -104,7 +151,7 @@ async function quote(clientId: string, code: string) {
   const qt = (await one<{ no: string }>(`select no from documents where client_id = $1 and type = 'QT' and status = 'issued' and total_satang = $2 order by no desc limit 1`, [clientId, p.price]))?.no
     ?? await S.issueDoc("QT", clientId, p.price, ctx?.jobId);
   const dep = depositPercent(), depAmt = Math.round(p.price * dep / 100);
-  await say(clientId, `ใบเสนอราคา ${qt}\n${p.name}\nราคา ${baht(p.price)}${dep ? `\nมัดจำ ${dep}% = ${baht(depAmt)} · ส่วนที่เหลือ ${baht(p.price - depAmt)} ชำระเมื่ออนุมัติเว็บ` : "\nชำระเมื่ออนุมัติเว็บ"}\nแก้ฟรี ${P.FREE_EDITS} รอบ\n\nกด "ยืนยันสั่งทำ" เพื่อเริ่มงานค่ะ`, [
+  await say(clientId, `ใบเสนอราคา ${qt}\n${p.name}\nราคา ${baht(p.price)}${dep ? `\nมัดจำ ${dep}% = ${baht(depAmt)} · ส่วนที่เหลือ ${baht(p.price - depAmt)} ชำระเมื่ออนุมัติเว็บ` : "\nไม่ต้องจ่ายก่อน ดูตัวอย่างเว็บก่อน ถูกใจค่อยชำระตอนอนุมัติ"}\nแก้ฟรี ${P.FREE_EDITS} รอบ\n\nกด "ยืนยันสั่งทำ" เพื่อเริ่มงานค่ะ`, [
     { label: "✅ ยืนยันสั่งทำ", data: `od:ok:${code}`, display: `ยืนยันสั่งทำ ${p.name}` },
     { label: "ดูแพ็กอื่น", data: "od:menu", display: "ขอดูแพ็กอื่น" },
   ]);
@@ -190,7 +237,7 @@ async function submitEdit(clientId: string, userId: string, text: string) {
     const ctx = await P.ctxForClient(clientId);
     if (!ctx) return;
     const r = await P.requestEdit(ctx, text);
-    if (r === "sent") { await say(clientId, "รับคำขอแก้แล้วค่ะ ทีมงานจะแก้แล้วส่งตัวอย่างใหม่ให้ตรวจในแชทนี้"); return; }
+    if (r === "sent") { await say(clientId, "รับคำขอแก้แล้วค่ะ ทีมงานจะแก้แล้วส่งตัวอย่างใหม่ให้ตรวจในแชทนี้"); await agentEdit(ctx.jobId, text); return; }
     const price = await P.extraEditPrice();
     if (!price) { await say(clientId, "รอบแก้ฟรีครบแล้วค่ะ ทีมงานจะติดต่อกลับเรื่องค่าบริการแก้เพิ่ม"); return; }
     await setSession(userId, { ...(await getSession(userId)), paidEditText: text.slice(0, 1000) });
@@ -205,6 +252,7 @@ async function paidEdit(clientId: string, text: string) {
   if (!ctx) return;
   await P.confirmPaidEdit(ctx, text);
   await say(clientId, "รับคำขอแก้เพิ่มแล้วค่ะ ค่าบริการรอบนี้จะรวมในใบแจ้งหนี้ ทีมงานจะส่งตัวอย่างใหม่ให้ตรวจในแชทนี้");
+  await agentEdit(ctx.jobId, text);
 }
 
 async function sendStatus(clientId: string) {
@@ -217,5 +265,5 @@ async function sendStatus(clientId: string) {
   };
   const quick: QuickItem[] = ctx.job.stage === "new_chat" ? [{ label: "ดูแพ็กเกจ", data: "od:menu", display: "ขอดูแพ็กเกจ" }]
     : ctx.job.stage === "client_review" ? [{ label: "✅ อนุมัติเว็บ", data: "od:approve", display: "อนุมัติเว็บนี้" }, { label: "ขอแก้", data: "od:edit", display: "ขอแก้เว็บ" }] : [];
-  await say(clientId, `สถานะงาน: ${next[ctx.job.stage]}${ctx.site && ["online", "care"].includes(ctx.job.stage) ? `\nhttps://${ctx.site.domain}` : ""}${open.length ? `\n\nยอดค้างชำระ: ${open.map((d) => `${d.no} ${baht(d.due)}`).join(" · ")}` : ""}`, quick.length ? quick : undefined);
+  await say(clientId, `สถานะงาน: ${next[ctx.job.stage]}${ctx.site && ["online", "care"].includes(ctx.job.stage) ? `\n${liveUrl(ctx.site.domain)}` : ""}${open.length ? `\n\nยอดค้างชำระ: ${open.map((d) => `${d.no} ${baht(d.due)}`).join(" · ")}` : ""}`, quick.length ? quick : undefined);
 }

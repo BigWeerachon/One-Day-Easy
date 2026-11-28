@@ -3,7 +3,7 @@ import * as P from "@/lib/portal";
 import { approveAction, requestEditAction, paidEditAction, slipAction, newLinkAction } from "@/lib/portal-actions";
 import { promptPayPayload } from "@/lib/promptpay";
 import { baht } from "@/lib/money";
-import { previewUrl } from "@/lib/preview";
+import { previewUrl, liveUrl } from "@/lib/preview";
 import ImageInput from "@/components/ImageInput";
 import IntakeForm from "@/components/IntakeForm";
 import SubmitButton from "@/components/SubmitButton";
@@ -126,7 +126,8 @@ export default async function Portal({ params, searchParams }: { params: Promise
     return page(4, "", "", (<>
       <div className="pt-card" style={{ textAlign: "center", padding: "28px 16px" }}><div className="pt-ok" style={{ fontSize: 40 }} aria-hidden="true">✓</div><h2 className="pt-h">ชำระเรียบร้อย · เว็บออนไลน์แล้ว</h2>{site && <p className="pt-sm pt-mut" style={{ marginTop: 6 }}>{site.domain}</p>}</div>
       <div className="pt-card">{rc && <div className="pt-row"><span>ใบเสร็จ</span><b>{rc.no}</b></div>}<div className="pt-row" style={{ border: 0 }}><span>สถานะเว็บ</span><b className="pt-ok">ออนไลน์</b></div></div>
-      {site && <a className="pt-btn" href={`https://${site.domain}`} target="_blank" rel="noopener noreferrer">เปิดเว็บไซต์</a>}
+      {site && <a className="pt-btn" href={liveUrl(site.domain)} target="_blank" rel="noopener noreferrer">เปิดเว็บไซต์</a>}
+      <a className="pt-btn o" href={`/p/${token}/edit`}>แก้เว็บเอง (รูป เมนู เวลาเปิด)</a>
       {rc && <a className="pt-btn o" href={`/p/${token}/doc/${rc.no}`}>ดาวน์โหลดใบเสร็จ</a>}
     </>));
   }

@@ -1,0 +1,13 @@
+{
+  "id": "P053",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "ลูกค้าส่วนใหญ่สั่งผ่าน Grab กับ LINE MAN อยู่แล้ว ส่วนคนที่ถามเมนูก็ดูจากเพจ Facebook กับ Google Maps ได้ เว็บอีกอันไม่น่าทำให้ยอดขึ้น แล้วยังต้องจ่ายค่าดูแลทุกปีอีก",
+  "objection": "มีเพจ Facebook กับ Google Maps แล้ว เว็บจะช่วยอะไรเพิ่ม แถมต้องจ่าย 2,990 ทุกปี",
+  "would_change_my_mind": "ถ้าเห็นร้านแบบเดียวกันที่ทำเว็บแล้วได้ออร์เดอร์เพิ่มจริง หรือลูกค้าสั่งตรงได้โดยไม่ต้องเสียค่า GP ให้แอป",
+  "price_too_cheap": 500,
+  "price_cheap": 990,
+  "price_expensive": 2500,
+  "price_too_expensive": 4000
+}
