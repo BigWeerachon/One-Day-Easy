@@ -7,6 +7,8 @@ import { draftForJob, shopOf, badImage, pickTemplate, type Design } from "./draf
 import { FONTS, sanitizeTheme } from "@ode/blocks/themes";
 import { previewUrl } from "./preview";
 import { notify } from "./notify";
+import { checkSalesReply, sameOriginOnly } from "./agent-guard";
+import { businessOf, AGENT_TEMPLATE } from "./business";
 
 // ทีม Agent ของระบบ (ทุกตัวใช้ Claude · บันทึกทุกครั้งใน agent_runs)
 //   Sales   ตอบคำถามในแชทที่ปุ่มตอบไม่ได้ · ส่งต่อคนเมื่อเกินขอบเขต
@@ -34,13 +36,16 @@ const ASK: Record<string, string> = {
   hours: "ร้านเปิด-ปิดวันและเวลาไหนบ้างคะ",
   map: "ที่อยู่ร้านคือที่ไหนคะ",
   menu: "ขอรายการเมนูพร้อมราคาค่ะ (พิมพ์หรือส่งรูปเมนูได้)",
+  cars: "ขอรายการรถในเต็นท์ค่ะ (ยี่ห้อ รุ่น ปี เลขไมล์ ราคา พร้อมรูปคันละ 1 รูป)",
+  sellcar: "อยากให้ฟอร์มรับซื้อรถบนเว็บเขียนหัวข้อว่าอะไรคะ (เช่น ขายรถให้เรา ประเมินฟรี)",
+  rooms: "ขอรายการห้องพักค่ะ (ชื่อห้อง ราคาต่อคืน พักได้กี่ท่าน พร้อมรูป)",
 };
 const pdpaText = (shop: string) => `${shop} เก็บข้อมูลที่คุณให้ผ่านเว็บไซต์นี้ (เช่น ชื่อ เบอร์โทร ข้อความ) เพื่อติดต่อกลับและให้บริการเท่านั้น ไม่ขายหรือส่งต่อให้บุคคลอื่น คุณขอดู แก้ไข หรือลบข้อมูลได้โดยติดต่อร้านทาง LINE`;
 
 /** Builder: แก้เว็บตามคำสั่ง แล้วบันทึกเฉพาะบล็อกที่ผ่านการตรวจ */
 async function applyFix(jobId: string, clientId: string, siteId: string, instruction: string) {
   const site = (await S.getSite(siteId))!;
-  const tpl = TEMPLATES.find((t) => t.id === site.template)!;
+  const tpl = await S.templateOf(site);
   const own = new Set((await q<{ id: string }>(`select id::text from client_files where client_id = $1 and kind <> 'ref'`, [clientId])).map((f) => `file:${f.id}`));
   const r = await proposePatch({ template: tpl, config: site.config, instruction: `${instruction}\n\nรูปของลูกค้าที่ใช้ได้: ${[...own].join(", ") || "ไม่มี"}`, notes: await S.clientNotes(clientId) });
   const config = { ...site.config };
@@ -71,6 +76,14 @@ const FOOD_TEMPLATES = [
 /** Design: ดูภาพ ref และรูปร้าน แล้วกำหนดเทมเพลต ชุดสี ฟอนต์ โทนภาษา · ค่าที่ไม่ผ่านการตรวจใช้ของเทมเพลตแทน */
 export async function runDesign(jobId: string, clientId: string): Promise<Design> {
   const shop = await shopOf(clientId);
+  // ธุรกิจที่มีเทมเพลตของตัวเอง (เต็นท์รถ ที่พัก): หน้าตาและชุดสีล็อกตามเทมเพลตที่อนุมัติแล้ว · ไม่ต้องให้ Design เลือก
+  const biz = businessOf(typeof shop.type === "string" ? shop.type : null);
+  if (biz === "car_dealer" || biz === "hotel_camp") {
+    const brief = { template: AGENT_TEMPLATE[biz], theme: {}, tone: "", heroPhoto: null, rationale: `ใช้เทมเพลต ${AGENT_TEMPLATE[biz]} ของธุรกิจ${biz === "car_dealer" ? "เต็นท์รถ" : "ที่พัก"} (ชุดสีและฟอนต์ล็อกตามเทมเพลต)`, usedRef: false, dropped: [] as string[] };
+    await q(`update jobs set design_brief = $2 where id = $1`, [jobId, JSON.stringify(brief)]);
+    await logRun("design", "designed", { jobId, clientId, detail: { summary: brief.rationale, ...brief } });
+    return brief;
+  }
   const files = (await q<{ id: string; kind: DraftImage["kind"]; mime: string; bytes: Buffer }>(`select id::text, kind, mime, bytes from client_files where client_id = $1 order by (kind = 'ref') desc, (kind = 'logo') desc, id limit 6`, [clientId]))
     .map((f) => ({ ...f, mime: f.mime as SlipImageMime }));
   const { data: b, usage } = await designBrief({ templates: FOOD_TEMPLATES, fonts: FONTS, shop, notes: await S.clientNotes(clientId), images: files });
@@ -100,7 +113,9 @@ export async function techCheck(siteId: string): Promise<TechResult> {
   if (!/<h1[\s>]/.test(html)) problems.push("ไม่มีหัวข้อหลัก (h1)");
   if (html.length > 1_500_000) problems.push(`หน้าใหญ่เกินไป (${Math.round(html.length / 1024)} KB)`);
   const origin = new URL(url).origin;
-  const imgs = [...new Set([...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&")))].slice(0, 40);
+  const all = [...new Set([...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&")))];
+  const imgs = sameOriginOnly(all, origin).slice(0, 40);
+  if (all.length > imgs.length) problems.push(`มีรูปจากเว็บภายนอก ${all.length - imgs.length} รูป (ต้องเป็นรูปของลูกค้าที่อัปโหลดเท่านั้น)`);
   for (const src of imgs) {
     try {
       const r = await fetch(src.startsWith("http") ? src : origin + src, { signal: AbortSignal.timeout(15_000) });
@@ -130,8 +145,7 @@ export async function runPipeline(jobId: string, opts: { instruction?: string; f
       siteId = d.siteId;
       await logRun("builder", "drafted", { jobId, clientId, detail: { summary: d.summary, applied: d.applied, skipped: d.skipped } });
     }
-    const tplId = (await S.getSite(siteId))!.template;
-    const tpl = TEMPLATES.find((t) => t.id === tplId)!;
+    const tpl = await S.templateOf((await S.getSite(siteId))!);
     await ensureLegal(siteId, tpl, (await shopOf(clientId)).name);
     if (opts.instruction) await applyFix(jobId, clientId, siteId, opts.instruction);
 
@@ -200,16 +214,27 @@ export async function customerAnswered(clientId: string, text: string) {
 
 // ---------- Sales ----------
 const SALES_DAILY_LIMIT = 20;
+/** เพดานรวมทั้งระบบต่อวัน (กันค่า API บานเมื่อมีคนยิงแชทจำนวนมาก) */
+const SALES_GLOBAL_DAILY_LIMIT = Number(process.env.SALES_GLOBAL_DAILY_LIMIT ?? 500);
 /** ตอบคำถามที่ปุ่มตอบไม่ได้ · คืน true ถ้า Agent ตอบแล้ว (false = ปล่อยให้ทีมตอบ) */
 export async function salesAnswer(clientId: string, text: string): Promise<boolean> {
   if (!agentsEnabled() || (process.env.SALES_AGENT ?? "on") === "off") return false;
   if (text.trim().length < 2 || text.length > 1000) return false;
   const n = await one<{ n: number }>(`select count(*)::int n from agent_runs where client_id = $1 and agent = 'sales' and created_at > now() - interval '1 day'`, [clientId]);
   if ((n?.n ?? 0) >= SALES_DAILY_LIMIT) return false;
-  const { data, usage } = await salesReply({ facts: await salesFacts(), history: (await S.listMessages(clientId)).map((m) => ({ from: m.from, text: m.text })), message: text });
+  const all = await one<{ n: number }>(`select count(*)::int n from agent_runs where agent = 'sales' and created_at > now() - interval '1 day'`);
+  if ((all?.n ?? 0) >= SALES_GLOBAL_DAILY_LIMIT) return false;
+  const facts = await salesFacts();
+  const { data, usage } = await salesReply({ facts, history: (await S.listMessages(clientId)).map((m) => ({ from: m.from, text: m.text })), message: text });
   const reply = data.reply.trim();
   if (data.action === "handoff" || !reply) {
     await logRun("sales", "handoff", { clientId, detail: { reason: data.reason }, usage });
+    return false;
+  }
+  // ด่านสุดท้ายก่อนถึงลูกค้า: ราคาแต่ง ลิงก์นอก ส่วนลด หรือเผยคำสั่งภายใน → ไม่ส่ง ให้คนตอบแทน
+  const guard = checkSalesReply(reply, facts);
+  if (!guard.ok) {
+    await logRun("sales", "blocked", { clientId, detail: { reason: guard.reason }, usage });
     return false;
   }
   await S.sendSystemMessage(clientId, reply.slice(0, 1000));
@@ -222,7 +247,8 @@ async function salesFacts() {
   const { FREE_EDITS } = await import("./portal");
   const b = (s: number) => `${(s / 100).toLocaleString("th-TH")} บาท`;
   return [
-    "บริการ: ทำเว็บไซต์ร้านอาหารและคาเฟ่ ทุกขั้นตอนทำผ่านแชท LINE นี้",
+    "บริการ: ทำเว็บไซต์ร้านค้า (ร้านอาหาร คาเฟ่ เต็นท์รถมือสอง ที่พัก/แคมป์) ทุกขั้นตอนทำผ่านแชท LINE นี้",
+    "งานตามโจทย์ (เว็บไซต์ออกแบบเฉพาะ งานหน่วยงานภาครัฐ ระบบงาน): ราคาตามขอบเขตงาน ทีมงานสรุปขอบเขตและราคาให้ก่อนเริ่ม · ถ้าลูกค้าถามเรื่องนี้ให้ handoff เพื่อให้ทีมคุยรายละเอียด",
     "ราคา:", ...items.map((i) => `- ${i.name}: ${b(i.price)}${i.recurring ? " ต่อปี" : ""} (${i.code})`),
     depositPercent() ? `มัดจำตอนยืนยันสั่งทำ: ${depositPercent()}% ของราคาแพ็ก ส่วนที่เหลือชำระเมื่ออนุมัติเว็บ` : "ไม่มีมัดจำ: ทำตัวอย่างเว็บให้ดูบนที่อยู่ฟรีก่อน ถ้าถูกใจค่อยชำระเต็มจำนวนตอนอนุมัติ แล้วเว็บขึ้นออนไลน์ (และผูกโดเมนจริงถ้าเลือกแพ็กที่รวมโดเมน)",
     "ค่าดูแลรายปี (รายการที่ต่อปี) ไม่บังคับต่อ ลูกค้าเลือกต่อหรือไม่ก็ได้",

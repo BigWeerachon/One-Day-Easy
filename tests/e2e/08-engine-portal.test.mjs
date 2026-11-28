@@ -13,6 +13,15 @@ test("Engine เปิดเว็บที่ออนไลน์ตาม Hos
   assert.equal((await engineGet("unknown-e2e.com")).status, 404);
 });
 
+test("โดเมนบริษัท → หน้าขายบริการ (ราคา + ปุ่ม LINE OA) · ไม่ใช่เว็บร้าน", async () => {
+  const r = await engineGet("www.onedayeasy-e2e.com");
+  assert.equal(r.status, 200);
+  assert.match(r.body, /ดูตัวอย่างก่อน ถูกใจค่อยจ่าย/);
+  assert.match(r.body, /990/);
+  assert.match(r.body, /งานตามโจทย์ ราคาตามขอบเขตงาน/);
+  assert.match(r.body, /line\.me\/R\/ti\/p\/%40onedayeasy/);
+});
+
 test("ฐานข้อมูลล่ม → เว็บร้านที่เคยเปิดแล้วยังเปิดได้ (ใช้ข้อมูลชุดล่าสุด) · CDN เก็บหน้าเว็บร้านได้", async () => {
   const before = await engineGet("mokahouse.com");
   assert.equal(before.status, 200);
